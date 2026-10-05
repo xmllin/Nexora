@@ -40,6 +40,8 @@ namespace Nexora.Tests
         {
             Assert.Equal("1.2.3.4", VersionNormalizer.ExtractMostSpecific("release-1.2", "tool-1.2.3.4-win64.exe"));
             Assert.True(VersionNormalizer.Compare("1.2.10", "1.2.2") > 0);
+            Assert.Equal(string.Empty, VersionNormalizer.ExtractMostSpecific("https://example.test/download/setup.exe?v=1780645729"));
+            Assert.Equal("1.0.31", VersionNormalizer.ExtractMostSpecific("LAMZU-Aurora-1.0.31-setup.rar?v=1780645729"));
         }
 
 

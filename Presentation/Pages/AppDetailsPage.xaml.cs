@@ -68,51 +68,35 @@ namespace Nexora.Pages
             var releaseProvider = GetReleaseProvider();
             if (releaseProvider == null)
             {
-                if (_app.Download != null)
+                VersionComboBox.Visibility = Visibility.Visible;
+                DownloadStatusText.Text = "Определение версии…";
+                try
                 {
-                    try
+                    using (var singleCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
                     {
-                        var cachedInfo = _main.TryGetCachedAppDownloadInfo(_app, out var appCachedInfo) ? appCachedInfo : null;
-                        if (cachedInfo != null)
+                        var singleRelease = await ResolveSingleReleaseAsync(singleCts.Token);
+                        if (singleRelease != null)
                         {
-                            _resolvedInitialDownload = cachedInfo;
-                            _main.CacheDownloadInfo(cachedInfo);
-                            ApplyDownloadDetails(cachedInfo);
-                            using (var versionCts = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
-                                await ResolveAndApplyVersionAsync(cachedInfo, versionCts.Token);
-                        }
-                        else
-                        {
-                            using (var resolveCts = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
-                            {
-                                var resolved = await _downloads.ResolveAsync(_app, resolveCts.Token);
-                                if (resolved != null)
-                                {
-                                    _resolvedInitialDownload = resolved;
-                                    _main.CacheDownloadInfo(resolved);
-                                    _main.CacheAppDownloadInfo(_app, resolved);
-                                    ApplyDownloadDetails(resolved);
-                                    await ResolveAndApplyVersionAsync(resolved, resolveCts.Token);
-                                }
-                            }
+                            ApplyReleases(new[] { singleRelease });
+                            return;
                         }
                     }
-                    catch (OperationCanceledException)
-                    {
-                        // Keep the configured metadata so the Download button can retry later.
-                    }
-                    catch (Exception ex)
-                    {
-                        _main.ShowNotification("Не удалось получить сведения о файле «" + _app.Name + "»: " + NotificationFormatter.FormatGeneralError(ex), NotificationKind.Warning, "download-metadata:" + (_app.Id ?? _app.Name));
-                    }
+
+                    VersionComboBox.IsEnabled = false;
+                    DownloadStatusText.Text = "Версия не определена.";
+                }
+                catch (OperationCanceledException)
+                {
+                    VersionComboBox.IsEnabled = false;
+                    DownloadStatusText.Text = "Не удалось определить версию.";
+                }
+                catch (Exception ex)
+                {
+                    VersionComboBox.IsEnabled = false;
+                    DownloadStatusText.Text = "Не удалось определить версию.";
+                    _main.ShowNotification("Не удалось получить сведения о «" + _app.Name + "»: " + NotificationFormatter.FormatGeneralError(ex), NotificationKind.Warning, "version-error:" + (_app.Id ?? _app.Name));
                 }
 
-                if (_resolvedInitialDownload != null)
-                    ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_resolvedInitialDownload.Version)
-                        ? "Не определена"
-                        : _resolvedInitialDownload.Version;
-                else
-                    ReleaseVersionText.Text = "Не определена";
                 return;
             }
 
@@ -145,6 +129,20 @@ namespace Nexora.Pages
             }
             catch (Exception ex)
             {
+                try
+                {
+                    using (var fallbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                    {
+                        var singleRelease = await ResolveSingleReleaseAsync(fallbackCts.Token);
+                        if (singleRelease != null)
+                        {
+                            ApplyReleases(new[] { singleRelease });
+                            return;
+                        }
+                    }
+                }
+                catch { }
+
                 VersionComboBox.IsEnabled = false;
                 DownloadStatusText.Text = "Не удалось получить версии.";
                 _main.ShowNotification("Не удалось получить версии «" + _app.Name + "»: " + NotificationFormatter.FormatGeneralError(ex), NotificationKind.Error, "releases-error:" + (_app.Id ?? _app.Name) + ":" + ex.GetType().FullName);
@@ -200,6 +198,27 @@ namespace Nexora.Pages
             }
         }
 
+        private async Task<AppRelease> ResolveSingleReleaseAsync(CancellationToken token)
+        {
+            var info = await _downloads.ResolveAsync(_app, token).ConfigureAwait(true);
+            if (info == null)
+                return null;
+
+            var version = await _versionResolver.ResolveAsync(_app, info, token).ConfigureAwait(true);
+            if (!string.IsNullOrWhiteSpace(version))
+                info.Version = version;
+
+            if (string.IsNullOrWhiteSpace(info.Version))
+                info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url);
+
+            return new AppRelease
+            {
+                Version = string.IsNullOrWhiteSpace(info.Version) ? "Последняя" : info.Version,
+                Title = _app.Name,
+                Download = info
+            };
+        }
+
         private static List<AppRelease> PrepareReleaseItems(IEnumerable<AppRelease> releases)
         {
             var unique = (releases ?? Enumerable.Empty<AppRelease>())
@@ -221,7 +240,7 @@ namespace Nexora.Pages
                 {
                     var version = string.IsNullOrWhiteSpace(item.Version) ? "Последняя" : item.Version;
                     item.DisplayVersion = formats.Count > 1 && !string.IsNullOrWhiteSpace(item.Download.Format)
-                        ? version + " · " + item.Download.Format
+                        ? version + " - " + item.Download.Format
                         : version;
                 }
             }
@@ -256,8 +275,17 @@ namespace Nexora.Pages
             ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Не указан";
             if (!HasRealExtension(info.FileName) && !string.IsNullOrWhiteSpace(info.Url))
                 _ = LoadDownloadFileNameAsync(info);
-            else if (!info.SizeBytes.HasValue && !string.IsNullOrWhiteSpace(info.Url))
-                _ = LoadDownloadSizeAsync(info);
+
+            if (!info.SizeBytes.HasValue)
+            {
+                if (string.Equals(info.PackageId, _app.Download?.PackageId, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                    _ = LoadWinGetDownloadMetadataAsync(info);
+                else if (!string.IsNullOrWhiteSpace(info.Url) &&
+                         Uri.TryCreate(info.Url, UriKind.Absolute, out var infoUri) &&
+                         (infoUri.Scheme == Uri.UriSchemeHttp || infoUri.Scheme == Uri.UriSchemeHttps))
+                    _ = LoadDownloadSizeAsync(info);
+            }
         }
 
         private async Task ResolveAndApplyVersionAsync(DownloadInfo info, CancellationToken token)
@@ -283,6 +311,25 @@ namespace Nexora.Pages
             {
                 // Version lookup is best-effort; the official download remains usable.
             }
+        }
+
+        private async Task LoadWinGetDownloadMetadataAsync(DownloadInfo info)
+        {
+            try
+            {
+                var provider = new WinGetDownloadProvider();
+                await provider.EnrichDownloadInfoAsync(_app, info, CancellationToken.None).ConfigureAwait(true);
+                _main.CacheDownloadInfo(info);
+                _main.CacheAppDownloadInfo(_app, info);
+
+                if (ReferenceEquals(_displayedInfo, info))
+                {
+                    ReleaseFormatText.Text = info.Format;
+                    if (info.SizeBytes.HasValue)
+                        ReleaseSizeText.Text = FormatSize(info.SizeBytes.Value);
+                }
+            }
+            catch { }
         }
 
         private async Task LoadDownloadFileNameAsync(DownloadInfo info)

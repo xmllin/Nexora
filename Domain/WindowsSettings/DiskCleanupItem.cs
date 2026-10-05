@@ -61,8 +61,8 @@ namespace Nexora.Domain.WindowsSettings
         public bool ActionVisible => HasData && !IsScanning && !IsCleaning;
         public string SizeText => FormatBytes(SizeBytes);
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-        private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        public event PropertyChangedEventHandler PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string name = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
         public static string FormatBytes(long bytes)

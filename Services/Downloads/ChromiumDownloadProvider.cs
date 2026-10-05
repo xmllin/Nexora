@@ -216,39 +216,22 @@ namespace Nexora.Services.Downloads
             var suffix = storagePlatform.IndexOf("Arm64", StringComparison.OrdinalIgnoreCase) >= 0 ? "arm64" : storagePlatform == "Win_x64" ? "x64" : "x86";
             var url = "https://commondatastorage.googleapis.com/chromium-browser-snapshots/" + storagePlatform + "/" + revision + "/" + archive;
             var fileName = "chromium-win-" + suffix + "-" + revision + ".zip";
-            var displayVersion = FormatRevision(revision);
             return new AppRelease
             {
-                Version = displayVersion,
-                Title = "Chromium snapshot " + displayVersion,
+                // Chromium snapshot revision is a build identifier, not a semantic
+                // product version. Keep it numeric for sorting and expose it with
+                // an explicit "Revision" label so it cannot be mistaken for 1.2.3.
+                Version = revision,
+                DisplayVersion = "Revision " + revision,
+                Title = "Chromium snapshot " + revision,
                 Download = new DownloadInfo
                 {
                     Url = url,
                     FileName = fileName,
                     Source = "Chromium",
-                    Version = displayVersion
+                    Version = revision
                 }
             };
-        }
-
-        private static string FormatRevision(string revision)
-        {
-            if (string.IsNullOrWhiteSpace(revision) || !long.TryParse(revision, out var value))
-                return revision ?? string.Empty;
-
-            var text = value.ToString();
-            if (text.Length <= 3) return text;
-
-            var groups = new List<string>();
-            while (text.Length > 3)
-            {
-                groups.Insert(0, text.Substring(text.Length - 3));
-                text = text.Substring(0, text.Length - 3);
-            }
-            if (!string.IsNullOrEmpty(text))
-                groups.Insert(0, text);
-
-            return string.Join(".", groups);
         }
 
         private static string ExtractRevision(string value)

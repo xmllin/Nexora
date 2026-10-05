@@ -264,6 +264,7 @@ namespace Nexora.Pages
             if (string.Equals(_app.Download?.Type, "GitHub", StringComparison.OrdinalIgnoreCase)) return _github;
             if (string.Equals(_app.Download?.Type, "Chromium", StringComparison.OrdinalIgnoreCase)) return _chromium;
             if (string.Equals(_app.Download?.Type, "Website", StringComparison.OrdinalIgnoreCase)) return _official;
+            if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase)) return new WinGetDownloadProvider();
             return null;
         }
 

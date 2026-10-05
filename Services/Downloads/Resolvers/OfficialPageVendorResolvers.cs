@@ -33,6 +33,11 @@ namespace Nexora.Services.Downloads
                 case "tor-browser": return await ResolveTorBrowserAsync(app, token);
                 case "firefox": return await ResolveFirefoxAsync(app, token);
                 case "vscode": return await ResolveVSCodeAsync(app, token);
+                case "visualstudio": return await ResolveVisualStudioAsync(app, token);
+                case "glaryutilities5": return await ResolveGlaryUtilitiesAsync(app, token);
+                case "hwmonitor": return await ResolveHwMonitorAsync(app, token);
+                case "opera": return await ResolveOperaAsync(app, token, false);
+                case "opera-gx": return await ResolveOperaAsync(app, token, true);
                 default: return null;
             }
         }
@@ -42,7 +47,11 @@ namespace Nexora.Services.Downloads
             var id = (app.Id ?? string.Empty).Trim().ToLowerInvariant();
             if (id == "makutweaker")
                 return await GetMakuTweakerReleasesAsync(app, token);
-            if (id != "vlc" && id != "aida64" && id != "malwarebytes" && id != "winrar" && id != "nvidia-app" && id != "tor-browser" && id != "firefox" && id != "vscode" && id != "everything")
+            if (id == "opera" || id == "opera-gx")
+                return await GetOperaReleasesAsync(app, token, id == "opera-gx");
+            if (id != "vlc" && id != "aida64" && id != "malwarebytes" && id != "winrar" &&
+                id != "nvidia-app" && id != "tor-browser" && id != "firefox" && id != "vscode" &&
+                id != "visualstudio" && id != "glaryutilities5" && id != "hwmonitor" && id != "everything")
                 return null;
 
             if (id == "everything")
@@ -350,21 +359,50 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
 
         private async Task<DownloadInfo> ResolveTorBrowserAsync(AppDefinition app, CancellationToken token)
         {
-            var pageUrl = "https://download.torproject.org/ru/tor-browser-for-desktop/";
-            var html = await GetHtmlAsync(pageUrl, token);
-            var architecture = PlatformDetectionService.Current.Architecture;
-            var windowsToken = architecture == "x86" ? "i686" : "x86_64";
-            var candidates = ExtractCandidates(pageUrl, html)
-                .Where(c => HasInstallerExtension(c.Url) || HasInstallerExtension(c.FileName))
-                .Where(c => ContainsToken(c.Url, "download.torproject.org") || ContainsToken(c.Url, "dist.torproject.org"))
-                .Where(c => ContainsToken(c.Url, windowsToken) || ContainsToken(c.FileName, windowsToken) ||
-                            (architecture == "arm64" && (ContainsToken(c.Url, "x86_64") || ContainsToken(c.FileName, "x86_64"))))
+            var root = "https://dist.torproject.org/torbrowser/";
+            var indexHtml = await GetHtmlAsync(root, token);
+            var versions = Regex.Matches(indexHtml, @"(?<![0-9])(?<version>15\.\d+\.\d+)(?=\/)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(m => m.Groups["version"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(v => VersionInfo.Parse(v))
                 .ToList();
-            var selected = SelectBestCandidate(app, candidates);
+
+            if (versions.Count == 0)
+                throw new InvalidOperationException("Не удалось найти стабильные версии Tor Browser.");
+
+            var version = versions[0];
+            var versionUrl = root + version + "/";
+            var versionHtml = await GetHtmlAsync(versionUrl, token);
+            var architecture = PlatformDetectionService.Current.Architecture;
+
+            var candidates = ExtractCandidates(versionUrl, versionHtml)
+                .Where(c => HasInstallerExtension(c.Url) || HasInstallerExtension(c.FileName))
+                .Where(c => ContainsToken(c.Url, "tor-browser-windows") || ContainsToken(c.FileName, "tor-browser-windows") ||
+                            ContainsToken(c.Url, "torbrowser-install-win") || ContainsToken(c.FileName, "torbrowser-install-win"))
+                .Where(c => !ContainsToken(c.Url, "aarch64") && !ContainsToken(c.FileName, "aarch64"))
+                .Where(c => architecture != "x86" ||
+                            ContainsToken(c.Url, "i686") || ContainsToken(c.FileName, "i686") ||
+                            ContainsToken(c.Url, "win32") || ContainsToken(c.FileName, "win32"))
+                .ToList();
+
+            var selected = candidates
+                .OrderByDescending(c => (c.FileName ?? c.Url ?? string.Empty).IndexOf("install", StringComparison.OrdinalIgnoreCase) >= 0 ? 20 : 0)
+                .ThenByDescending(c => (c.FileName ?? c.Url ?? string.Empty).IndexOf("x86_64", StringComparison.OrdinalIgnoreCase) >= 0 ? 10 : 0)
+                .FirstOrDefault();
+
             if (selected == null)
-                throw new InvalidOperationException("Не удалось найти Windows-установщик Tor Browser на официальном сайте.");
-            return CreateInfo(selected.Url, selected.FileName, "Tor Browser");
+                selected = SelectBestCandidate(app, ExtractCandidates(versionUrl, versionHtml));
+
+            if (selected == null)
+                throw new InvalidOperationException("Не удалось найти установщик Tor Browser " + version + ".");
+
+            var info = await RequireBinaryProbeAsync(CreateInfo(selected.Url, selected.FileName, "Tor Browser"), token);
+            info.Version = version;
+            return info;
         }
+
 
 
 private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, CancellationToken token)
@@ -383,9 +421,31 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
             var architecture = PlatformDetectionService.Current.Architecture;
             var os = architecture == "arm64" ? "win64-aarch64" : architecture == "x86" ? "win" : "win64";
             var url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=" + os + "&lang=en-US";
-            // Mozilla's Bouncer resolves this to the actual EXE and the downloader validates the final binary.
             var fileName = architecture == "arm64" ? "Firefox-Setup-ARM64.exe" : "Firefox-Setup.exe";
-            return await RequireBinaryProbeAsync(CreateInfo(url, fileName, "Mozilla"), token);
+
+            var info = await RequireBinaryProbeAsync(CreateInfo(url, fileName, "Mozilla"), token);
+
+            try
+            {
+                using (var response = await Client.GetAsync("https://product-details.mozilla.org/1.0/firefox_versions.json", token))
+                {
+                    response.EnsureSuccessStatusCode();
+                    var json = await response.Content.ReadAsStringAsync();
+                    using (var document = JsonDocument.Parse(json))
+                    {
+                        if (document.RootElement.TryGetProperty("LATEST_FIREFOX_VERSION", out var latest) &&
+                            latest.ValueKind == JsonValueKind.String)
+                            info.Version = latest.GetString();
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { }
+
+            if (string.IsNullOrWhiteSpace(info.Version))
+                throw new InvalidOperationException("Mozilla не вернула актуальную версию Firefox.");
+
+            return info;
         }
 
         private async Task<DownloadInfo> ResolveVSCodeAsync(AppDefinition app, CancellationToken token)
@@ -411,14 +471,15 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
             var fileName = selected?.FileName;
             if (string.IsNullOrWhiteSpace(url))
             {
-                // Current official CDN endpoint, with the official redirect kept as
-                // the ultimate fallback for regions where the CDN path changes.
                 url = "https://data-cdn.mbamupdates.com/web/mb5-setup-consumer/MBSetup.exe";
                 fileName = "MBSetup.exe";
             }
 
-            var info = CreateInfo(url, fileName ?? "MBSetup.exe", "Malwarebytes");
-            info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url, html);
+            var info = await RequireBinaryProbeAsync(CreateInfo(url, fileName ?? "MBSetup.exe", "Malwarebytes"), token);
+            var version = FindFirstVersion(html, @"Malwarebytes(?:\s+for\s+Windows)?[^0-9]{0,40}(?<version>5\.\d+\.\d+)");
+            if (string.IsNullOrWhiteSpace(version))
+                version = "5.7.2";
+            info.Version = version;
             return info;
         }
 
@@ -434,8 +495,12 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
             var selected = SelectBestCandidate(app, candidates);
             if (selected == null)
                 throw new InvalidOperationException("Не удалось найти установщик WinRAR на официальной странице.");
-            var info = CreateInfo(selected.Url, selected.FileName, "WinRAR");
-            info.Version = VersionNormalizer.ExtractMostSpecific(selected.FileName, selected.Url, html);
+
+            var info = await RequireBinaryProbeAsync(CreateInfo(selected.Url, selected.FileName, "WinRAR"), token);
+            var version = FindFirstVersion(html, @"WinRAR\s+(?<version>\d+\.\d+)");
+            if (string.IsNullOrWhiteSpace(version))
+                version = "7.23";
+            info.Version = version;
             return info;
         }
 
@@ -449,10 +514,135 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
             var selected = SelectBestCandidate(app, candidates);
             if (selected == null)
                 throw new InvalidOperationException("Не удалось найти установщик NVIDIA App на официальной странице.");
-            var info = CreateInfo(selected.Url, selected.FileName, "NVIDIA");
-            info.Version = VersionNormalizer.ExtractMostSpecific(selected.FileName, selected.Url, html);
+
+            var info = await RequireBinaryProbeAsync(CreateInfo(selected.Url, selected.FileName, "NVIDIA"), token);
+
+            try
+            {
+                var highlights = await GetHtmlAsync("https://www.nvidia.com/en-us/software/nvidia-app/release-highlights/", token);
+                var version = FindFirstVersion(highlights, @"NVIDIA\s+App\s+(?<version>\d+\.\d+\.\d+)");
+                if (string.IsNullOrWhiteSpace(version))
+                    version = FindFirstVersion(highlights, @"App\s+(?<version>\d+\.\d+\.\d+)");
+                info.Version = string.IsNullOrWhiteSpace(version) ? "11.0.9" : version;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                info.Version = "11.0.9";
+            }
+
             return info;
         }
 
+        private async Task<DownloadInfo> ResolveVisualStudioAsync(AppDefinition app, CancellationToken token)
+        {
+            var pageUrl = "https://visualstudio.microsoft.com/downloads/";
+            var html = await GetHtmlAsync(pageUrl, token);
+            DownloadInfo info = null;
+            try
+            {
+                info = await ResolveGenericAsync(app, token);
+            }
+            catch (Exception) when (!token.IsCancellationRequested) { }
+
+            if (info == null)
+            {
+                var fallback = CreateInfo("https://aka.ms/vs/18/release/vs_community.exe", "vs_community.exe", "Microsoft");
+                info = await RequireBinaryProbeAsync(fallback, token);
+            }
+
+            var version = FindFirstVersion(html, @"Visual\s+Studio\s+Community\s+Version\s+(?<version>\d+(?:\.\d+){1,3})");
+            if (string.IsNullOrWhiteSpace(version))
+                version = "18.10.3";
+            info.Version = version;
+            return info;
+        }
+
+        private async Task<DownloadInfo> ResolveGlaryUtilitiesAsync(AppDefinition app, CancellationToken token)
+        {
+            var html = await GetHtmlAsync(app.Website, token);
+            DownloadInfo info = null;
+            try
+            {
+                info = await ResolveGenericAsync(app, token);
+            }
+            catch (Exception) when (!token.IsCancellationRequested) { }
+
+            if (info == null)
+                throw new InvalidOperationException("Не удалось найти установщик Glary Utilities.");
+
+            info = await RequireBinaryProbeAsync(info, token);
+            var version = FindFirstVersion(html, @"Current\s+Version[^0-9]{0,30}(?<version>\d+(?:\.\d+){2,4})");
+            if (string.IsNullOrWhiteSpace(version))
+                version = FindFirstVersion(html, @"Glary\s+Utilities[^0-9]{0,30}(?<version>\d+(?:\.\d+){2,4})");
+            if (string.IsNullOrWhiteSpace(version))
+                version = "6.47.0.51";
+            info.Version = version;
+            return info;
+        }
+
+        private async Task<DownloadInfo> ResolveHwMonitorAsync(AppDefinition app, CancellationToken token)
+        {
+            var html = await GetHtmlAsync(app.Website, token);
+            var info = await ResolveGenericAsync(app, token);
+            info = await RequireBinaryProbeAsync(info, token);
+
+            var version = FindFirstVersion(html, @"HWMonitor(?:\s+PRO)?\s+(?<version>\d+\.\d+)");
+            if (string.IsNullOrWhiteSpace(version))
+                version = FindFirstVersion(html, @"Version\s*(?<version>\d+\.\d+)");
+            if (string.IsNullOrWhiteSpace(version))
+                version = "1.59";
+            info.Version = version;
+            return info;
+        }
+
+        private async Task<DownloadInfo> ResolveOperaAsync(AppDefinition app, CancellationToken token, bool gx)
+        {
+            var releases = await GetOperaReleasesAsync(app, token, gx);
+            var latest = releases.FirstOrDefault(item => item?.Download != null);
+            if (latest == null)
+                throw new InvalidOperationException("Не удалось определить актуальную версию Opera" + (gx ? " GX" : "") + ".");
+            return latest.Download;
+        }
+
+        private async Task<IReadOnlyList<AppRelease>> GetOperaReleasesAsync(AppDefinition app, CancellationToken token, bool gx)
+        {
+            var root = gx
+                ? "https://ftp.opera.com/pub/opera_gx/"
+                : "https://ftp.opera.com/pub/opera/desktop/";
+            var html = await GetHtmlAsync(root, token);
+
+            var versions = Regex.Matches(html, @"(?<![0-9])(?<version>\d+\.\d+\.\d+\.\d+)(?=\/)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(m => m.Groups["version"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(v => VersionInfo.Parse(v))
+                .ToList();
+
+            var architecture = PlatformDetectionService.Current.Architecture;
+            var suffix = architecture == "arm64" ? "_arm64" : architecture == "x86" ? "_x86" : "_x64";
+            var releases = new List<AppRelease>();
+
+            foreach (var version in versions)
+            {
+                var fileName = gx
+                    ? "Opera_GX_" + version + "_Setup" + suffix + ".exe"
+                    : "Opera_" + version + "_Setup" + suffix + ".exe";
+                var url = root + version + "/win/" + fileName;
+                var info = CreateInfo(url, fileName, gx ? "Opera GX" : "Opera");
+                info.Version = version;
+
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = (gx ? "Opera GX " : "Opera ") + version,
+                    Download = info
+                });
+            }
+
+            return releases;
+        }
     }
+
 }

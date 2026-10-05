@@ -49,6 +49,10 @@ namespace Nexora.Services.Downloads
                 return await GetMakuTweakerReleasesAsync(app, token);
             if (id == "opera" || id == "opera-gx")
                 return await GetOperaReleasesAsync(app, token, id == "opera-gx");
+            if (id == "firefox")
+                return await GetFirefoxReleasesAsync(app, token);
+            if (id == "tor-browser")
+                return await GetTorBrowserReleasesAsync(app, token);
             if (id != "vlc" && id != "aida64" && id != "malwarebytes" && id != "winrar" &&
                 id != "nvidia-app" && id != "tor-browser" && id != "firefox" && id != "vscode" &&
                 id != "visualstudio" && id != "glaryutilities5" && id != "hwmonitor" && id != "everything")
@@ -362,9 +366,18 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
 
         private async Task<DownloadInfo> ResolveTorBrowserAsync(AppDefinition app, CancellationToken token)
         {
+            var releases = await GetTorBrowserReleasesAsync(app, token);
+            var latest = releases.FirstOrDefault(item => item?.Download != null);
+            if (latest == null)
+                throw new InvalidOperationException("Не удалось найти стабильные версии Tor Browser.");
+            return latest.Download;
+        }
+
+        private async Task<IReadOnlyList<AppRelease>> GetTorBrowserReleasesAsync(AppDefinition app, CancellationToken token)
+        {
             var root = "https://dist.torproject.org/torbrowser/";
-            var indexHtml = await GetHtmlAsync(root, token);
-            var versions = Regex.Matches(indexHtml, @"(?<![0-9])(?<version>15\.\d+\.\d+)(?=\/)",
+            var html = await GetHtmlAsync(root, token);
+            var versions = Regex.Matches(html, @"(?<![0-9])(?<version>15\.\d+\.\d+)(?=\/)",
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
                 .Cast<Match>()
                 .Select(m => m.Groups["version"].Value)
@@ -372,38 +385,26 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
                 .OrderByDescending(v => VersionInfo.Parse(v))
                 .ToList();
 
-            if (versions.Count == 0)
-                throw new InvalidOperationException("Не удалось найти стабильные версии Tor Browser.");
-
-            var version = versions[0];
-            var versionUrl = root + version + "/";
-            var versionHtml = await GetHtmlAsync(versionUrl, token);
             var architecture = PlatformDetectionService.Current.Architecture;
+            var platform = architecture == "x86" ? "win32" : "win64";
+            var releases = new List<AppRelease>();
 
-            var candidates = ExtractCandidates(versionUrl, versionHtml)
-                .Where(c => HasInstallerExtension(c.Url) || HasInstallerExtension(c.FileName))
-                .Where(c => ContainsToken(c.Url, "tor-browser-windows") || ContainsToken(c.FileName, "tor-browser-windows") ||
-                            ContainsToken(c.Url, "torbrowser-install-win") || ContainsToken(c.FileName, "torbrowser-install-win"))
-                .Where(c => !ContainsToken(c.Url, "aarch64") && !ContainsToken(c.FileName, "aarch64"))
-                .Where(c => architecture != "x86" ||
-                            ContainsToken(c.Url, "i686") || ContainsToken(c.FileName, "i686") ||
-                            ContainsToken(c.Url, "win32") || ContainsToken(c.FileName, "win32"))
-                .ToList();
+            foreach (var version in versions)
+            {
+                var fileName = "torbrowser-install-" + platform + "-" + version + ".exe";
+                var url = root + version + "/" + fileName;
+                var info = CreateInfo(url, fileName, "Tor Browser");
+                info.Version = version;
 
-            var selected = candidates
-                .OrderByDescending(c => (c.FileName ?? c.Url ?? string.Empty).IndexOf("install", StringComparison.OrdinalIgnoreCase) >= 0 ? 20 : 0)
-                .ThenByDescending(c => (c.FileName ?? c.Url ?? string.Empty).IndexOf("x86_64", StringComparison.OrdinalIgnoreCase) >= 0 ? 10 : 0)
-                .FirstOrDefault();
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = "Tor Browser " + version,
+                    Download = info
+                });
+            }
 
-            if (selected == null)
-                selected = SelectBestCandidate(app, ExtractCandidates(versionUrl, versionHtml));
-
-            if (selected == null)
-                throw new InvalidOperationException("Не удалось найти установщик Tor Browser " + version + ".");
-
-            var info = await RequireBinaryProbeAsync(CreateInfo(selected.Url, selected.FileName, "Tor Browser"), token);
-            info.Version = version;
-            return info;
+            return releases;
         }
 
 
@@ -421,34 +422,46 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
 
         private async Task<DownloadInfo> ResolveFirefoxAsync(AppDefinition app, CancellationToken token)
         {
-            var architecture = PlatformDetectionService.Current.Architecture;
-            var os = architecture == "arm64" ? "win64-aarch64" : architecture == "x86" ? "win" : "win64";
-            var url = "https://download.mozilla.org/?product=firefox-latest-ssl&os=" + os + "&lang=en-US";
-            var fileName = architecture == "arm64" ? "Firefox-Setup-ARM64.exe" : "Firefox-Setup.exe";
-
-            var info = await RequireBinaryProbeAsync(CreateInfo(url, fileName, "Mozilla"), token);
-
-            try
-            {
-                using (var response = await Client.GetAsync("https://product-details.mozilla.org/1.0/firefox_versions.json", token))
-                {
-                    response.EnsureSuccessStatusCode();
-                    var json = await response.Content.ReadAsStringAsync();
-                    using (var document = JsonDocument.Parse(json))
-                    {
-                        if (document.RootElement.TryGetProperty("LATEST_FIREFOX_VERSION", out var latest) &&
-                            latest.ValueKind == JsonValueKind.String)
-                            info.Version = latest.GetString();
-                    }
-                }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch { }
-
-            if (string.IsNullOrWhiteSpace(info.Version))
+            var releases = await GetFirefoxReleasesAsync(app, token);
+            var latest = releases.FirstOrDefault(item => item?.Download != null);
+            if (latest == null)
                 throw new InvalidOperationException("Mozilla не вернула актуальную версию Firefox.");
+            return latest.Download;
+        }
 
-            return info;
+        private async Task<IReadOnlyList<AppRelease>> GetFirefoxReleasesAsync(AppDefinition app, CancellationToken token)
+        {
+            var root = "https://ftp.mozilla.org/pub/firefox/releases/";
+            var html = await GetHtmlAsync(root, token);
+            var versions = Regex.Matches(html, @"(?<![0-9])(?<version>\d+\.\d+(?:\.\d+){0,2})(?=\/)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(m => m.Groups["version"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(v => VersionInfo.Parse(v))
+                .ToList();
+
+            var architecture = PlatformDetectionService.Current.Architecture;
+            var platformFolder = architecture == "arm64" ? "win64-aarch64" : architecture == "x86" ? "win32" : "win64";
+            var releases = new List<AppRelease>();
+
+            foreach (var version in versions)
+            {
+                var fileName = "Firefox Setup " + version + ".exe";
+                var encodedFileName = Uri.EscapeDataString(fileName).Replace("%2D", "-");
+                var url = root + version + "/" + platformFolder + "/en-US/" + encodedFileName;
+                var info = CreateInfo(url, fileName, "Mozilla");
+                info.Version = version;
+
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = "Firefox " + version,
+                    Download = info
+                });
+            }
+
+            return releases;
         }
 
         private async Task<DownloadInfo> ResolveVSCodeAsync(AppDefinition app, CancellationToken token)

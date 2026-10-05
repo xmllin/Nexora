@@ -85,6 +85,7 @@ namespace Nexora.Pages
         {
             try
             {
+                var selectedVersion = (VersionComboBox.SelectedItem as AppRelease)?.Version;
                 IReadOnlyList<AppRelease> freshReleases;
                 using (var refreshCts = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
                 {
@@ -102,7 +103,7 @@ namespace Nexora.Pages
                 _main.CacheReleases(_app, freshReleases);
 
                 if (_main.TryGetCachedReleases(_app, out var mergedReleases))
-                    ApplyReleases(mergedReleases);
+                    ApplyReleases(mergedReleases, selectedVersion);
 
                 DownloadStatusText.Text = string.Empty;
             }

@@ -254,10 +254,6 @@ namespace Nexora.Pages
             if (!string.IsNullOrWhiteSpace(info.Url) && !_main.TryGetCachedAppDownloadInfo(_app, out _))
                 _main.CacheAppDownloadInfo(_app, info);
 
-            if ((_releases == null || _releases.Count == 0) &&
-                string.Equals(ReleaseVersionText.Text, "Не определена", StringComparison.OrdinalIgnoreCase))
-                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(info.Version) ? "Не определена" : info.Version;
-
             ReleaseFormatText.Text = info.Format;
             ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Определяется…";
             if (!HasRealExtension(info.FileName) && !string.IsNullOrWhiteSpace(info.Url))

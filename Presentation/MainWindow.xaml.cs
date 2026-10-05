@@ -33,7 +33,7 @@ namespace Nexora
         private readonly Dictionary<string, DateTime> _releaseCacheUpdated = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DownloadInfo> _downloadInfoCache = new Dictionary<string, DownloadInfo>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, DownloadInfo> _appDownloadInfoCache = new Dictionary<string, DownloadInfo>(StringComparer.OrdinalIgnoreCase);
-        private static readonly TimeSpan ReleaseUiCacheLifetime = TimeSpan.FromMinutes(15);
+        private static readonly TimeSpan ReleaseUiCacheLifetime = TimeSpan.FromDays(3650);
         private readonly Dictionary<string, ActiveDownloadEntry> _activeDownloads = new Dictionary<string, ActiveDownloadEntry>(StringComparer.OrdinalIgnoreCase);
         private readonly DispatcherTimer _downloadToastTimer;
         private readonly Queue<NotificationEntry> _downloadToastQueue = new Queue<NotificationEntry>();
@@ -59,7 +59,7 @@ namespace Nexora
             public string Message { get; set; }
             public NotificationKind Kind { get; set; }
         }
-        private const int DownloadCacheSchemaVersion = 8;
+        private const int DownloadCacheSchemaVersion = 9;
         private static readonly string CacheFile = UserDataPath.File("download_metadata_cache.json");
         private string _previousPage = "home";
         private string _currentPage = "home";
@@ -72,10 +72,9 @@ namespace Nexora
         public bool TryGetCachedReleases(AppDefinition app, out IReadOnlyList<AppRelease> releases)
         {
             var key = GetReleaseCacheKey(app);
-            DateTime updated;
-            if (_releaseCache.TryGetValue(key, out releases) && releases != null && releases.Count > 0 &&
-                _releaseCacheUpdated.TryGetValue(key, out updated) && DateTime.UtcNow - updated < ReleaseUiCacheLifetime)
+            if (_releaseCache.TryGetValue(key, out releases) && releases != null && releases.Count > 0)
                 return true;
+
             releases = null;
             return false;
         }
@@ -83,9 +82,79 @@ namespace Nexora
         public void CacheReleases(AppDefinition app, IReadOnlyList<AppRelease> releases)
         {
             var key = GetReleaseCacheKey(app);
-            _releaseCache[key] = releases ?? new List<AppRelease>();
+            var incoming = (releases ?? new List<AppRelease>())
+                .Where(item => item != null && item.Download != null)
+                .ToList();
+
+            if (!_releaseCache.TryGetValue(key, out var existing) || existing == null)
+            {
+                _releaseCache[key] = incoming;
+            }
+            else
+            {
+                var merged = existing.ToList();
+                foreach (var fresh in incoming)
+                {
+                    var identity = GetReleaseIdentity(fresh);
+                    var index = merged.FindIndex(item => string.Equals(GetReleaseIdentity(item), identity, StringComparison.OrdinalIgnoreCase));
+                    if (index < 0)
+                    {
+                        merged.Add(fresh);
+                    }
+                    else
+                    {
+                        merged[index] = MergeRelease(merged[index], fresh);
+                    }
+                }
+                _releaseCache[key] = merged;
+            }
+
             _releaseCacheUpdated[key] = DateTime.UtcNow;
             SaveDownloadCache();
+        }
+
+        private static string GetReleaseIdentity(AppRelease release)
+        {
+            var version = VersionNormalizer.Normalize(release?.Version ?? string.Empty);
+            var format = release?.Download?.Format ?? string.Empty;
+            return version + "|" + format;
+        }
+
+        private static AppRelease MergeRelease(AppRelease oldRelease, AppRelease freshRelease)
+        {
+            if (oldRelease == null) return freshRelease;
+            if (freshRelease == null) return oldRelease;
+
+            var fresh = freshRelease.Download;
+            var old = oldRelease.Download;
+            if (fresh != null && old != null)
+            {
+                if (!fresh.SizeBytes.HasValue && old.SizeBytes.HasValue)
+                    fresh.SizeBytes = old.SizeBytes;
+                if (string.IsNullOrWhiteSpace(fresh.Url))
+                    fresh.Url = old.Url;
+                if (string.IsNullOrWhiteSpace(fresh.FileName))
+                    fresh.FileName = old.FileName;
+                if (string.IsNullOrWhiteSpace(fresh.Version))
+                    fresh.Version = old.Version;
+                if (string.IsNullOrWhiteSpace(fresh.Source))
+                    fresh.Source = old.Source;
+                if (string.IsNullOrWhiteSpace(fresh.PackageId))
+                    fresh.PackageId = old.PackageId;
+                if (string.IsNullOrWhiteSpace(fresh.PackageSource))
+                    fresh.PackageSource = old.PackageSource;
+                if (string.IsNullOrWhiteSpace(fresh.Architecture))
+                    fresh.Architecture = old.Architecture;
+                if (string.IsNullOrWhiteSpace(fresh.InstallerType))
+                    fresh.InstallerType = old.InstallerType;
+            }
+
+            if (!freshRelease.PublishedAt.HasValue)
+                freshRelease.PublishedAt = oldRelease.PublishedAt;
+            if (string.IsNullOrWhiteSpace(freshRelease.Title))
+                freshRelease.Title = oldRelease.Title;
+            freshRelease.IsPrerelease = freshRelease.IsPrerelease || oldRelease.IsPrerelease;
+            return freshRelease;
         }
 
         public bool TryGetCachedDownloadInfo(string url, out DownloadInfo info)
@@ -148,12 +217,10 @@ namespace Nexora
                 var updatedMap = state.ReleaseUpdated ?? new Dictionary<string, DateTime>();
                 foreach (var item in state.Releases ?? new Dictionary<string, List<AppRelease>>())
                 {
+                    _releaseCache[item.Key] = item.Value ?? new List<AppRelease>();
                     DateTime updated;
-                    if (updatedMap.TryGetValue(item.Key, out updated) && DateTime.UtcNow - updated < ReleaseUiCacheLifetime)
-                    {
-                        _releaseCache[item.Key] = item.Value;
+                    if (updatedMap.TryGetValue(item.Key, out updated))
                         _releaseCacheUpdated[item.Key] = updated;
-                    }
                 }
                 foreach (var item in state.Downloads ?? new Dictionary<string, DownloadInfo>())
                     _downloadInfoCache[item.Key] = item.Value;

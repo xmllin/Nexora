@@ -25,7 +25,7 @@ namespace Nexora.Services.Downloads
         private static readonly Dictionary<string, ReleaseCacheEntry> Cache = new Dictionary<string, ReleaseCacheEntry>(StringComparer.OrdinalIgnoreCase);
         private static readonly TimeSpan MemoryCacheLifetime = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan PersistentCacheLifetime = TimeSpan.FromDays(7);
-        private const int PersistentCacheSchemaVersion = 7;
+        private const int PersistentCacheSchemaVersion = 8;
         private static readonly string PersistentCacheFile = UserDataPath.File("official_releases_cache.json");
 
         private sealed class ReleaseCacheEntry

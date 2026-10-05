@@ -77,58 +77,6 @@ namespace Nexora.Services.Downloads
         private async Task<string> DownloadResolvedAsync(
             AppDefinition app, DownloadInfo info, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController)
         {
-            var targetDir = DownloadSettings.GetFolder();
-            Directory.CreateDirectory(targetDir);
-
-            if (!HasRealExtension(info.FileName))
-            {
-                try
-                {
-                    var metadata = new DownloadMetadataService();
-                    var remoteName = await metadata.GetFileNameAsync(info.Url, token);
-                    if (!string.IsNullOrWhiteSpace(remoteName)) info.FileName = remoteName;
-                }
-                catch (OperationCanceledException) { throw; }
-                catch { }
-            }
-
-            var safeName = SanitizeFileName(info.FileName);
-            var target = GetUniquePath(Path.Combine(targetDir, safeName));
-            var partial = target + ".part";
-            var partialMeta = partial + ".json";
-            var existingLength = PreparePartialFile(partial, partialMeta, info.Url);
-
-            try
-            {
-                await HttpDownloads.DownloadResumableAsync(info.Url, partial, partialMeta, existingLength, info, app.Download, progress, token, pauseController);
-                await FileValidator.ValidateAsync(partial, app.Download, token);
-                File.Move(partial, target, true);
-                TryDeleteFile(partialMeta);
-                AddHistory(app, target, info.Source ?? app.Download.Type);
-                return target;
-            }
-            catch (TaskCanceledException ex) when (!token.IsCancellationRequested)
-            {
-                throw new TimeoutException("Время ожидания загрузки истекло.", ex);
-            }
-            catch (OperationCanceledException)
-            {
-                // A user cancellation should leave no half-downloaded installer behind.
-                TryDeleteFile(partial);
-                TryDeleteFile(partialMeta);
-                TryDeleteFile(target);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                DownloadLog.Error("Ошибка загрузки файла для " + app.Name + ".", ex);
-                throw;
-            }
-        }
-
-        private async Task<string> DownloadResolvedAsync(
-            AppDefinition app, DownloadInfo info, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController)
-        {
             if (IsManagedDownload(info))
             {
                 var provider = ResolveManagedProvider(app.Download?.Type);

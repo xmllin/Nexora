@@ -55,9 +55,7 @@
     "icon": "logos/Opera.svg",
     "website": "https://www.opera.com/",
     "download": {
-      "type": "WinGet",
-      "packageId": "Opera.Opera",
-      "packageSource": "winget"
+      "type": "Website"
     }
   },
   {
@@ -68,9 +66,7 @@
     "icon": "logos/Opera_GX.svg",
     "website": "https://www.opera.com/gx",
     "download": {
-      "type": "WinGet",
-      "packageId": "Opera.OperaGX",
-      "packageSource": "winget"
+      "type": "Website"
     }
   },
   {
@@ -93,9 +89,9 @@
     "icon": "logos/Telegram.svg",
     "website": "https://telegram.org/",
     "download": {
-      "type": "WinGet",
-      "packageId": "Telegram.TelegramDesktop",
-      "packageSource": "winget"
+      "type": "GitHub",
+      "repository": "telegramdesktop/tdesktop",
+      "assetPattern": "*.exe"
     }
   },
   {
@@ -309,7 +305,8 @@
     "download": {
       "type": "GitHub",
       "repository": "Happ-proxy/happ-desktop",
-      "assetPattern": "setup-Happ.{arch}.exe"
+      "assetPattern": "setup-Happ.{arch}.exe",
+      "includePrerelease": true
     }
   },
   {
@@ -496,9 +493,7 @@
     "icon": "interface/white/fluent-app-folder.svg",
     "website": "https://www.cpuid.com/softwares/hwmonitor.html",
     "download": {
-      "type": "WinGet",
-      "packageId": "CPUID.HWMonitor",
-      "packageSource": "winget"
+      "type": "Website"
     }
   },
   {
@@ -622,9 +617,7 @@
     "icon": "logos/Visual_studio.png",
     "website": "https://visualstudio.microsoft.com/",
     "download": {
-      "type": "WinGet",
-      "packageId": "Microsoft.VisualStudio.2022.Community",
-      "packageSource": "winget"
+      "type": "Website"
     }
   },
   {
@@ -672,9 +665,7 @@
     "icon": "interface/white/fluent-app-folder.svg",
     "website": "https://www.glarysoft.com/glary-utilities/",
     "download": {
-      "type": "WinGet",
-      "packageId": "Glarysoft.GlaryUtilities",
-      "packageSource": "winget"
+      "type": "Website"
     }
   },
   {

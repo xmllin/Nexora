@@ -18,6 +18,10 @@ namespace Nexora.Services.Downloads
     {
         private static readonly HttpClient Client = CreateClient();
         private static readonly TimeSpan CurrentRevisionCacheLifetime = TimeSpan.FromHours(12);
+        private static readonly TimeSpan ChromiumReleaseMapLifetime = TimeSpan.FromHours(6);
+        private static readonly object ChromiumReleaseMapLock = new object();
+        private static List<ChromiumReleaseMarker> ChromiumReleaseMap;
+        private static DateTime ChromiumReleaseMapUpdatedUtc;
         private static readonly string CurrentRevisionCacheDirectory = UserDataPath.Subfolder("Cache", "Chromium");
 
         private static HttpClient CreateClient()
@@ -57,12 +61,14 @@ namespace Nexora.Services.Downloads
             if (!revisions.Any(x => x.Number == currentNumber))
                 revisions.Add(new SnapshotRevision { Value = currentRevision, Number = currentNumber });
 
+            var releaseMap = await GetChromiumReleaseMapAsync(token);
+
             return revisions
                 .GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
                 .OrderByDescending(x => x.Number)
                 .Take(30)
-                .Select(x => CreateRelease(x.Value, storagePlatform))
+                .Select(x => CreateRelease(x.Value, storagePlatform, ResolveChromiumVersion(x.Number, releaseMap)))
                 .ToList();
         }
 
@@ -210,20 +216,25 @@ namespace Nexora.Services.Downloads
             return result;
         }
 
-        private static AppRelease CreateRelease(string revision, string storagePlatform)
+        private static AppRelease CreateRelease(string revision, string storagePlatform, string semanticVersion)
         {
             var archive = "chrome-win.zip";
             var suffix = storagePlatform.IndexOf("Arm64", StringComparison.OrdinalIgnoreCase) >= 0 ? "arm64" : storagePlatform == "Win_x64" ? "x64" : "x86";
             var url = "https://commondatastorage.googleapis.com/chromium-browser-snapshots/" + storagePlatform + "/" + revision + "/" + archive;
             var fileName = "chromium-win-" + suffix + "-" + revision + ".zip";
+
+            var displayVersion = string.IsNullOrWhiteSpace(semanticVersion)
+                ? "Revision " + revision
+                : semanticVersion + " - rev " + revision;
+
             return new AppRelease
             {
-                // Chromium snapshot revision is a build identifier, not a semantic
-                // product version. Keep it numeric for sorting and expose it with
-                // an explicit "Revision" label so it cannot be mistaken for 1.2.3.
+                // Snapshot revisions are commit/build identifiers. When ChromiumDash
+                // can map the snapshot to a released Chromium version, show that real
+                // product version while keeping the revision available for precision.
                 Version = revision,
-                DisplayVersion = "Revision " + revision,
-                Title = "Chromium snapshot " + revision,
+                DisplayVersion = displayVersion,
+                Title = "Chromium " + displayVersion,
                 Download = new DownloadInfo
                 {
                     Url = url,
@@ -234,11 +245,133 @@ namespace Nexora.Services.Downloads
             };
         }
 
+        private static async Task<List<ChromiumReleaseMarker>> GetChromiumReleaseMapAsync(CancellationToken token)
+        {
+            lock (ChromiumReleaseMapLock)
+            {
+                if (ChromiumReleaseMap != null &&
+                    DateTime.UtcNow - ChromiumReleaseMapUpdatedUtc < ChromiumReleaseMapLifetime)
+                    return ChromiumReleaseMap;
+            }
+
+            var endpoints = new[]
+            {
+                "https://chromiumdash.appspot.com/fetch_releases?channel=Canary&platform=Windows&num=200",
+                "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Windows&num=200"
+            };
+
+            foreach (var endpoint in endpoints)
+            {
+                try
+                {
+                    using (var response = await Client.GetAsync(endpoint, HttpCompletionOption.ResponseContentRead, token))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        var json = await response.Content.ReadAsStringAsync();
+                        using (var document = JsonDocument.Parse(json))
+                        {
+                            JsonElement items = document.RootElement;
+                            if (items.ValueKind == JsonValueKind.Object &&
+                                items.TryGetProperty("releases", out var releases))
+                                items = releases;
+
+                            if (items.ValueKind != JsonValueKind.Array)
+                                continue;
+
+                            var map = new List<ChromiumReleaseMarker>();
+                            foreach (var item in items.EnumerateArray())
+                            {
+                                if (item.ValueKind != JsonValueKind.Object ||
+                                    !item.TryGetProperty("version", out var versionProperty))
+                                    continue;
+
+                                var version = versionProperty.GetString();
+                                if (string.IsNullOrWhiteSpace(version) || VersionInfo.Parse(version).Parts.Count == 0)
+                                    continue;
+
+                                var position = ReadChromiumPosition(item);
+                                if (position <= 0)
+                                    continue;
+
+                                map.Add(new ChromiumReleaseMarker
+                                {
+                                    Version = version,
+                                    Position = position
+                                });
+                            }
+
+                            if (map.Count > 0)
+                            {
+                                map = map
+                                    .OrderBy(x => x.Position)
+                                    .ToList();
+                                lock (ChromiumReleaseMapLock)
+                                {
+                                    ChromiumReleaseMap = map;
+                                    ChromiumReleaseMapUpdatedUtc = DateTime.UtcNow;
+                                }
+                                return map;
+                            }
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch { }
+            }
+
+            return new List<ChromiumReleaseMarker>();
+        }
+
+        private static long ReadChromiumPosition(JsonElement item)
+        {
+            foreach (var name in new[]
+            {
+                "chromium_main_branch_position",
+                "main_branch_position",
+                "chromiumMainBranchPosition",
+                "position"
+            })
+            {
+                if (!item.TryGetProperty(name, out var property))
+                    continue;
+
+                if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out var number))
+                    return number;
+
+                if (property.ValueKind == JsonValueKind.String && long.TryParse(property.GetString(), out number))
+                    return number;
+            }
+
+            return 0;
+        }
+
+        private static string ResolveChromiumVersion(long revision, List<ChromiumReleaseMarker> map)
+        {
+            if (revision <= 0 || map == null || map.Count == 0)
+                return string.Empty;
+
+            ChromiumReleaseMarker best = null;
+            foreach (var marker in map)
+            {
+                if (marker.Position > revision)
+                    break;
+                best = marker;
+            }
+
+            return best?.Version ?? string.Empty;
+        }
+
         private static string ExtractRevision(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return null;
             var parts = value.TrimEnd('/').Split('/');
             return parts.Length == 0 ? null : parts[parts.Length - 1];
+        }
+
+        private sealed class ChromiumReleaseMarker
+        {
+            public string Version { get; set; }
+            public long Position { get; set; }
         }
 
         private sealed class SnapshotRevision

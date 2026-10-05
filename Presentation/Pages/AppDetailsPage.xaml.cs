@@ -228,6 +228,13 @@ namespace Nexora.Pages
                 {
                     var version = string.IsNullOrWhiteSpace(item.Version) ? "Последняя" : item.Version;
                     var displayVersion = string.IsNullOrWhiteSpace(item.DisplayVersion) ? version : item.DisplayVersion;
+                    if (!string.IsNullOrWhiteSpace(item.Download.Format))
+                    {
+                        var suffix = " - " + item.Download.Format;
+                        if (displayVersion.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                            displayVersion = displayVersion.Substring(0, displayVersion.Length - suffix.Length).TrimEnd();
+                    }
+
                     item.DisplayVersion = formats.Count > 1 && !string.IsNullOrWhiteSpace(item.Download.Format)
                         ? displayVersion + " - " + item.Download.Format
                         : displayVersion;

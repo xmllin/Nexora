@@ -55,9 +55,9 @@
     "icon": "logos/Opera.svg",
     "website": "https://www.opera.com/",
     "download": {
-      "type": "Direct",
-      "url": "https://net.geo.opera.com/opera/stable/windows",
-      "fileName": "OperaSetup.exe"
+      "type": "WinGet",
+      "packageId": "Opera.Opera",
+      "packageSource": "winget"
     }
   },
   {
@@ -68,9 +68,9 @@
     "icon": "logos/Opera_GX.svg",
     "website": "https://www.opera.com/gx",
     "download": {
-      "type": "Direct",
-      "url": "https://net.geo.opera.com/opera_gx/stable/windows",
-      "fileName": "OperaGXSetup.exe"
+      "type": "WinGet",
+      "packageId": "Opera.OperaGX",
+      "packageSource": "winget"
     }
   },
   {
@@ -93,10 +93,9 @@
     "icon": "logos/Telegram.svg",
     "website": "https://telegram.org/",
     "download": {
-      "type": "Direct",
-      "url": "https://telegram.org/dl/desktop/win64",
-      "fileName": "TelegramSetup.exe",
-      "architecture": "x64"
+      "type": "WinGet",
+      "packageId": "Telegram.TelegramDesktop",
+      "packageSource": "winget"
     }
   },
   {
@@ -108,9 +107,9 @@
     "icon": "logos/discord.svg",
     "website": "https://discord.com/",
     "download": {
-      "type": "Direct",
-      "url": "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch={discordArch}",
-      "fileName": "DiscordSetup.exe"
+      "type": "WinGet",
+      "packageId": "Discord.Discord",
+      "packageSource": "winget"
     }
   },
   {
@@ -308,9 +307,9 @@
     "icon": "logos/happ.png",
     "website": "https://www.happ.su/main/ru",
     "download": {
-      "type": "Direct",
-      "url": "https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe",
-      "fileName": "HappSetup.exe"
+      "type": "GitHub",
+      "repository": "Happ-proxy/happ-desktop",
+      "assetPattern": "setup-Happ.{arch}.exe"
     }
   },
   {
@@ -497,7 +496,9 @@
     "icon": "interface/white/fluent-app-folder.svg",
     "website": "https://www.cpuid.com/softwares/hwmonitor.html",
     "download": {
-      "type": "Website"
+      "type": "WinGet",
+      "packageId": "CPUID.HWMonitor",
+      "packageSource": "winget"
     }
   },
   {
@@ -621,9 +622,9 @@
     "icon": "logos/Visual_studio.png",
     "website": "https://visualstudio.microsoft.com/",
     "download": {
-      "type": "Direct",
-      "url": "https://aka.ms/vs/17/release/vs_community.exe",
-      "fileName": "VisualStudioSetup.exe"
+      "type": "WinGet",
+      "packageId": "Microsoft.VisualStudio.2022.Community",
+      "packageSource": "winget"
     }
   },
   {
@@ -665,15 +666,15 @@
   },
   {
     "id": "glaryutilities5",
-    "name": "Glary Utilities 5",
+    "name": "Glary Utilities",
     "description": "Набор инструментов для обслуживания и оптимизации Windows.",
     "category": "Утилиты",
     "icon": "interface/white/fluent-app-folder.svg",
     "website": "https://www.glarysoft.com/glary-utilities/",
     "download": {
-      "type": "Direct",
-      "url": "https://www.glarysoft.com/aff/download2.php?s=GU",
-      "fileName": "GlaryUtilitiesSetup.exe"
+      "type": "WinGet",
+      "packageId": "Glarysoft.GlaryUtilities",
+      "packageSource": "winget"
     }
   },
   {

@@ -20,7 +20,7 @@ namespace Nexora.Pages
         private readonly MainWindow _main;
         private readonly DiskCleanupService _service = new DiskCleanupService();
         private readonly ObservableCollection<DiskCleanupItem> _items = new ObservableCollection<DiskCleanupItem>();
-        private CancellationTokenSource? _cts;
+        private CancellationTokenSource _cts;
         private bool _busy;
 
         public DiskCleanupPage(MainWindow main)

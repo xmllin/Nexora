@@ -377,7 +377,7 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
         {
             var root = "https://dist.torproject.org/torbrowser/";
             var html = await GetHtmlAsync(root, token);
-            var versions = Regex.Matches(html, @"(?<![0-9])(?<version>15\.\d+\.\d+)(?=\/)",
+            var versions = Regex.Matches(html, @"(?<![0-9])(?<version>\d+\.\d+\.\d+)(?=\/)",
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
                 .Cast<Match>()
                 .Select(m => m.Groups["version"].Value)

@@ -65,137 +65,121 @@ namespace Nexora.Pages
         private async void AppDetailsPage_Loaded(object sender, RoutedEventArgs e)
         {
             Loaded -= AppDetailsPage_Loaded;
+
             var releaseProvider = GetReleaseProvider();
-            if (releaseProvider == null)
-            {
-                VersionComboBox.Visibility = Visibility.Visible;
-                DownloadStatusText.Text = "Определение версии…";
-                try
-                {
-                    using (var singleCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
-                    {
-                        var singleRelease = await ResolveSingleReleaseAsync(singleCts.Token);
-                        if (singleRelease != null)
-                        {
-                            ApplyReleases(new[] { singleRelease });
-                            return;
-                        }
-                    }
-
-                    VersionComboBox.IsEnabled = false;
-                    DownloadStatusText.Text = "Версия не определена.";
-                }
-                catch (OperationCanceledException)
-                {
-                    VersionComboBox.IsEnabled = false;
-                    DownloadStatusText.Text = "Не удалось определить версию.";
-                }
-                catch (Exception ex)
-                {
-                    VersionComboBox.IsEnabled = false;
-                    DownloadStatusText.Text = "Не удалось определить версию.";
-                    _main.ShowNotification("Не удалось получить сведения о «" + _app.Name + "»: " + NotificationFormatter.FormatGeneralError(ex), NotificationKind.Warning, "version-error:" + (_app.Id ?? _app.Name));
-                }
-
-                return;
-            }
-
             VersionComboBox.Visibility = Visibility.Visible;
-            var wingetProvider = releaseProvider as WinGetDownloadProvider;
 
-            // WinGet is the source of truth for its version catalog, so do not use
-            // the potentially stale release cache here. This keeps the dropdown
-            // complete and current.
-            if (wingetProvider == null && _main.TryGetCachedReleases(_app, out var cachedReleases))
+            IReadOnlyList<AppRelease> cachedReleases;
+            if (_main.TryGetCachedReleases(_app, out cachedReleases))
             {
                 ApplyReleases(cachedReleases);
+                _ = RefreshReleaseCatalogAsync(releaseProvider);
                 return;
             }
 
             DownloadStatusText.Text = "Загрузка списка версий…";
+            await RefreshReleaseCatalogAsync(releaseProvider);
+        }
+
+        private async Task RefreshReleaseCatalogAsync(IReleaseDownloadProvider provider)
+        {
             try
             {
-                using (var loadCts = new CancellationTokenSource(TimeSpan.FromSeconds(25)))
-                    _releases = await releaseProvider.GetReleasesAsync(_app, loadCts.Token);
-                _main.CacheReleases(_app, _releases);
-                ApplyReleases(_releases);
+                IReadOnlyList<AppRelease> freshReleases;
+                using (var refreshCts = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
+                {
+                    if (provider != null)
+                        freshReleases = await provider.GetReleasesAsync(_app, refreshCts.Token);
+                    else
+                    {
+                        var singleRelease = await ResolveSingleReleaseAsync(refreshCts.Token);
+                        freshReleases = singleRelease == null
+                            ? new List<AppRelease>()
+                            : new[] { singleRelease };
+                    }
+                }
+
+                _main.CacheReleases(_app, freshReleases);
+
+                if (_main.TryGetCachedReleases(_app, out var mergedReleases))
+                    ApplyReleases(mergedReleases);
+
+                DownloadStatusText.Text = string.Empty;
             }
             catch (OperationCanceledException)
             {
-                VersionComboBox.IsEnabled = false;
-                DownloadStatusText.Text = "Не удалось загрузить список версий.";
-                _main.ShowNotification("Не удалось загрузить список версий для «" + _app.Name + "». Проверьте подключение к интернету.", NotificationKind.Warning, "releases-timeout:" + (_app.Id ?? _app.Name));
-                return;
+                if (!_main.TryGetCachedReleases(_app, out _))
+                {
+                    VersionComboBox.IsEnabled = false;
+                    DownloadStatusText.Text = "Не удалось загрузить список версий.";
+                    _main.ShowNotification(
+                        "Не удалось загрузить список версий для «" + _app.Name + "». Проверьте подключение к интернету.",
+                        NotificationKind.Warning,
+                        "releases-timeout:" + (_app.Id ?? _app.Name));
+                }
             }
             catch (Exception ex)
             {
-                try
+                if (_main.TryGetCachedReleases(_app, out _))
                 {
-                    using (var fallbackCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
-                    {
-                        var singleRelease = await ResolveSingleReleaseAsync(fallbackCts.Token);
-                        if (singleRelease != null)
-                        {
-                            ApplyReleases(new[] { singleRelease });
-                            return;
-                        }
-                    }
+                    // Cached catalog remains immediately usable; refresh is best-effort.
+                    DownloadStatusText.Text = string.Empty;
+                    return;
                 }
-                catch { }
 
                 VersionComboBox.IsEnabled = false;
                 DownloadStatusText.Text = "Не удалось получить версии.";
-                _main.ShowNotification("Не удалось получить версии «" + _app.Name + "»: " + NotificationFormatter.FormatGeneralError(ex), NotificationKind.Error, "releases-error:" + (_app.Id ?? _app.Name) + ":" + ex.GetType().FullName);
-                return;
-            }
-
-            if (wingetProvider != null)
-            {
-                try
-                {
-                    using (var latestCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
-                    {
-                        var latest = await wingetProvider.GetLatestVersionAsync(_app, latestCts.Token);
-                        if (!string.IsNullOrWhiteSpace(latest))
-                        {
-                            _latestVersion = latest;
-                            ReleaseVersionText.Text = latest;
-                        }
-                    }
-                }
-                catch
-                {
-                    // The version list is already available; keep its first item as fallback.
-                }
+                _main.ShowNotification(
+                    "Не удалось получить версии «" + _app.Name + "»: " +
+                    NotificationFormatter.FormatGeneralError(ex),
+                    NotificationKind.Error,
+                    "releases-error:" + (_app.Id ?? _app.Name) + ":" + ex.GetType().FullName);
             }
         }
 
-        private void ApplyReleases(IReadOnlyList<AppRelease> releases)
+        private void ApplyReleases(IReadOnlyList<AppRelease> releases, string selectedVersion = null)
         {
             _releases = PrepareReleaseItems(releases);
             VersionComboBox.ItemsSource = _releases;
             VersionComboBox.IsEnabled = _releases.Count > 0;
-            if (_releases.Count > 0)
-                VersionComboBox.SelectedIndex = 0;
 
-            DownloadStatusText.Text = _releases.Count == 0 ? "Стабильные версии не найдены." : string.Empty;
-            // The first item is the latest version returned by WinGet.
-            _latestVersion = _releases.Count > 0
-                ? (string.IsNullOrWhiteSpace(_releases[0].Version) ? string.Empty : _releases[0].Version)
-                : string.Empty;
+            var selectedIndex = 0;
+            if (!string.IsNullOrWhiteSpace(selectedVersion))
+            {
+                var normalized = VersionNormalizer.Normalize(selectedVersion);
+                var preserved = _releases
+                    .Select((item, index) => new { item, index })
+                    .FirstOrDefault(x => string.Equals(
+                        VersionNormalizer.Normalize(x.item.Version ?? string.Empty),
+                        normalized,
+                        StringComparison.OrdinalIgnoreCase));
+                if (preserved != null)
+                    selectedIndex = preserved.index;
+            }
 
             if (_releases.Count > 0)
             {
-                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_releases[0].Version)
+                VersionComboBox.SelectedIndex = selectedIndex;
+                var selected = _releases[selectedIndex];
+                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(selected.Version)
                     ? "Не определена"
+                    : selected.Version;
+                ApplyDownloadDetails(selected.Download);
+
+                _latestVersion = string.IsNullOrWhiteSpace(_releases[0].Version)
+                    ? string.Empty
                     : _releases[0].Version;
-                ApplyDownloadDetails(_releases[0].Download);
             }
             else
             {
                 ReleaseVersionText.Text = "Не определена";
                 ApplyDownloadDetails(null);
+                _latestVersion = string.Empty;
             }
+
+            DownloadStatusText.Text = _releases.Count == 0
+                ? "Стабильные версии не найдены."
+                : string.Empty;
         }
 
         private async Task<AppRelease> ResolveSingleReleaseAsync(CancellationToken token)
@@ -204,12 +188,17 @@ namespace Nexora.Pages
             if (info == null)
                 return null;
 
-            var version = await _versionResolver.ResolveAsync(_app, info, token).ConfigureAwait(true);
-            if (!string.IsNullOrWhiteSpace(version))
-                info.Version = version;
+            // Providers are responsible for authoritative versions. Only WinGet
+            // needs a separate metadata lookup because it has the package catalog.
+            if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+            {
+                var version = await _versionResolver.ResolveAsync(_app, info, token).ConfigureAwait(true);
+                if (!string.IsNullOrWhiteSpace(version))
+                    info.Version = version;
+            }
 
             if (string.IsNullOrWhiteSpace(info.Version))
-                info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url);
+                info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName);
 
             return new AppRelease
             {
@@ -259,20 +248,19 @@ namespace Nexora.Pages
                 return;
             }
 
-            var normalizedVersion = VersionNormalizer.ExtractMostSpecific(
-                info.Version,
-                info.FileName,
-                info.Url);
-
-            info.Version = normalizedVersion;
+            if (string.IsNullOrWhiteSpace(info.Version))
+                info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName);
 
             if (!string.IsNullOrWhiteSpace(info.Url) && !_main.TryGetCachedAppDownloadInfo(_app, out _))
                 _main.CacheAppDownloadInfo(_app, info);
 
-            if (string.IsNullOrWhiteSpace(_latestVersion))
+            if ((_releases == null || _releases.Count == 0) &&
+                string.IsNullOrWhiteSpace(ReleaseVersionText.Text) ||
+                string.Equals(ReleaseVersionText.Text, "Не определена", StringComparison.OrdinalIgnoreCase))
                 ReleaseVersionText.Text = string.IsNullOrWhiteSpace(info.Version) ? "Не определена" : info.Version;
+
             ReleaseFormatText.Text = info.Format;
-            ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Не указан";
+            ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Определяется…";
             if (!HasRealExtension(info.FileName) && !string.IsNullOrWhiteSpace(info.Url))
                 _ = LoadDownloadFileNameAsync(info);
 
@@ -370,7 +358,6 @@ namespace Nexora.Pages
             if (!(VersionComboBox.SelectedItem is AppRelease release))
                 return;
 
-            // "Текущая версия" is the version currently selected for download.
             ReleaseVersionText.Text = string.IsNullOrWhiteSpace(release.Version)
                 ? "Не определена"
                 : release.Version;

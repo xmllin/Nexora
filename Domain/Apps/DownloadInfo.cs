@@ -9,6 +9,10 @@ namespace Nexora.Models
         public string Source { get; set; }
         public string Version { get; set; }
         public long? SizeBytes { get; set; }
+        public string PackageId { get; set; }
+        public string PackageSource { get; set; }
+        public string Architecture { get; set; }
+        public string InstallerType { get; set; }
 
         public string Format
         {

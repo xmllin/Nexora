@@ -134,9 +134,9 @@
     "icon": "logos/7zip.png",
     "website": "https://www.7-zip.org/",
     "download": {
-      "type": "GitHub",
-      "repository": "ip7z/7zip",
-      "assetPattern": "7z*-{arch}.exe"
+      "type": "WinGet",
+      "packageId": "7zip.7zip",
+      "packageSource": "winget"
     }
   },
   {

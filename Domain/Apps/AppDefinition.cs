@@ -35,5 +35,8 @@ namespace Nexora.Models
         public bool PreferNativeArchitecture { get; set; } = true;
         public int? MinimumWindowsBuild { get; set; }
         public int? MaximumWindowsBuild { get; set; }
+        public string PackageId { get; set; }
+        public string PackageSource { get; set; }
+        public string InstallerType { get; set; }
     }
 }

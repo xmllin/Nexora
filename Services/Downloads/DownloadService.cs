@@ -22,7 +22,8 @@ namespace Nexora.Services.Downloads
                 { "Official", new OfficialDownloadProvider() },
                 { "Website", new OfficialPageDownloadProvider() },
                 { "GitHub", new GitHubDownloadProvider() },
-                { "Chromium", new ChromiumDownloadProvider() }
+                { "Chromium", new ChromiumDownloadProvider() },
+                { "WinGet", new WinGetDownloadProvider() }
             };
         }
 
@@ -68,12 +69,12 @@ namespace Nexora.Services.Downloads
 
         public async Task<string> DownloadAsync(AppDefinition app, DownloadInfo info, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController = null)
         {
-            if (app == null || info == null || string.IsNullOrWhiteSpace(info.Url))
+            if (app == null || info == null)
                 throw new InvalidOperationException("Не выбран файл загрузки.");
             return await DownloadResolvedAsync(app, info, progress, token, pauseController);
         }
 
-        private static async Task<string> DownloadResolvedAsync(
+        private async Task<string> DownloadResolvedAsync(
             AppDefinition app, DownloadInfo info, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController)
         {
             var targetDir = DownloadSettings.GetFolder();
@@ -123,6 +124,104 @@ namespace Nexora.Services.Downloads
                 DownloadLog.Error("Ошибка загрузки файла для " + app.Name + ".", ex);
                 throw;
             }
+        }
+
+        private async Task<string> DownloadResolvedAsync(
+            AppDefinition app, DownloadInfo info, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController)
+        {
+            if (IsManagedDownload(info))
+            {
+                var provider = ResolveManagedProvider(app.Download?.Type);
+                if (provider == null)
+                    throw new InvalidOperationException("Для типа загрузки «" + app.Download?.Type + "» не найден managed-провайдер.");
+
+                var targetDir = DownloadSettings.GetFolder();
+                Directory.CreateDirectory(targetDir);
+                var target = GetUniquePath(Path.Combine(targetDir, SanitizeFileName(info.FileName)));
+
+                try
+                {
+                    var result = await provider.DownloadAsync(app, info, target, progress, token);
+                    await FileValidator.ValidateAsync(result, app.Download, token);
+                    AddHistory(app, result, info.Source ?? app.Download.Type);
+                    return result;
+                }
+                catch (OperationCanceledException)
+                {
+                    TryDeleteFile(target);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    DownloadLog.Error("Ошибка managed-загрузки файла для " + app.Name + ".", ex);
+                    TryDeleteFile(target);
+                    throw;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(info.Url) ||
+                !Uri.TryCreate(info.Url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                throw new InvalidOperationException("У выбранной загрузки отсутствует корректный HTTP/HTTPS URL.");
+
+            var targetDirHttp = DownloadSettings.GetFolder();
+            Directory.CreateDirectory(targetDirHttp);
+
+            if (!HasRealExtension(info.FileName))
+            {
+                try
+                {
+                    var metadata = new DownloadMetadataService();
+                    var remoteName = await metadata.GetFileNameAsync(info.Url, token);
+                    if (!string.IsNullOrWhiteSpace(remoteName)) info.FileName = remoteName;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch { }
+            }
+
+            var safeName = SanitizeFileName(info.FileName);
+            var target = GetUniquePath(Path.Combine(targetDirHttp, safeName));
+            var partial = target + ".part";
+            var partialMeta = partial + ".json";
+            var existingLength = PreparePartialFile(partial, partialMeta, info.Url);
+
+            try
+            {
+                await HttpDownloads.DownloadResumableAsync(info.Url, partial, partialMeta, existingLength, info, app.Download, progress, token, pauseController);
+                await FileValidator.ValidateAsync(partial, app.Download, token);
+                File.Move(partial, target, true);
+                TryDeleteFile(partialMeta);
+                AddHistory(app, target, info.Source ?? app.Download.Type);
+                return target;
+            }
+            catch (TaskCanceledException ex) when (!token.IsCancellationRequested)
+            {
+                throw new TimeoutException("Время ожидания загрузки истекло.", ex);
+            }
+            catch (OperationCanceledException)
+            {
+                TryDeleteFile(partial);
+                TryDeleteFile(partialMeta);
+                TryDeleteFile(target);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                DownloadLog.Error("Ошибка загрузки файла для " + app.Name + ".", ex);
+                throw;
+            }
+        }
+
+        private static bool IsManagedDownload(DownloadInfo info)
+        {
+            return info != null && !string.IsNullOrWhiteSpace(info.PackageId);
+        }
+
+        private static IManagedDownloadProvider ResolveManagedProvider(string type)
+        {
+            if (string.Equals(type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                return new WinGetDownloadProvider();
+            return null;
         }
 
         private static long PreparePartialFile(string partial, string metadataPath, string url)

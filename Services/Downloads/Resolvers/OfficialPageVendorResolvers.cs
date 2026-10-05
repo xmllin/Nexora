@@ -326,7 +326,10 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
         try
         {
             var info = await RequireBinaryProbeAsync(CreateInfo(candidate.Url, candidate.FileName, "AIDA64"), token);
-            info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url, html);
+            var labeledVersion = FindFirstVersion(html, @"Version:\s*(?<version>\d+(?:\.\d+){2,9})");
+            info.Version = string.IsNullOrWhiteSpace(labeledVersion)
+                ? VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url)
+                : labeledVersion;
             return info;
         }
         catch (Exception) when (!token.IsCancellationRequested) { }
@@ -551,7 +554,7 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
                 info = await RequireBinaryProbeAsync(fallback, token);
             }
 
-            var version = FindFirstVersion(html, @"Visual\s+Studio\s+Community\s+Version\s+(?<version>\d+(?:\.\d+){1,3})");
+            var version = FindFirstVersion(html, @"Visual\s+Studio\s+Community[\s\S]{0,120}?Version\s+(?<version>\d+(?:\.\d+){1,3})");
             if (string.IsNullOrWhiteSpace(version))
                 version = "18.10.3";
             info.Version = version;
@@ -572,7 +575,7 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
                 throw new InvalidOperationException("Не удалось найти установщик Glary Utilities.");
 
             info = await RequireBinaryProbeAsync(info, token);
-            var version = FindFirstVersion(html, @"Current\s+Version[^0-9]{0,30}(?<version>\d+(?:\.\d+){2,4})");
+            var version = FindFirstVersion(html, @"Current\s+Version[\s\S]{0,100}?(?<version>\d+(?:\.\d+){2,4})");
             if (string.IsNullOrWhiteSpace(version))
                 version = FindFirstVersion(html, @"Glary\s+Utilities[^0-9]{0,30}(?<version>\d+(?:\.\d+){2,4})");
             if (string.IsNullOrWhiteSpace(version))

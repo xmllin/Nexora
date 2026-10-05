@@ -97,7 +97,7 @@ namespace Nexora.Services.Downloads
                         {
                             if (release.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
                             var prerelease = release.TryGetProperty("prerelease", out var pre) && pre.GetBoolean();
-                            if (prerelease) continue;
+                            if (prerelease && !app.Download.IncludePrerelease) continue;
                             if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) continue;
 
                             var selectedAssets = SelectAssets(app.Download, assets.EnumerateArray().ToList());

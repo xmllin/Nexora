@@ -376,7 +376,13 @@ namespace Nexora.Pages
             // the "Текущая версия" field.
             if (string.Equals(release.Download?.Source, "Chromium", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(release.DisplayVersion))
-                return release.DisplayVersion;
+            {
+                var revisionMarker = " - rev ";
+                var markerIndex = release.DisplayVersion.IndexOf(revisionMarker, StringComparison.OrdinalIgnoreCase);
+                return markerIndex > 0
+                    ? release.DisplayVersion.Substring(0, markerIndex)
+                    : release.DisplayVersion;
+            }
 
             return string.IsNullOrWhiteSpace(release.Version) ? "Не определена" : release.Version;
         }

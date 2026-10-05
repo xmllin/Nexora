@@ -45,7 +45,10 @@ namespace Nexora.Models
             {
                 if (!match.Success) continue;
                 var candidate = match.Groups[1].Value;
-                if (candidate.Length > 8 && candidate.IndexOf('.') < 0)
+                // Ignore long standalone numeric values such as CDN cache timestamps,
+                // Unix timestamps, hashes and Chromium-style revisions. Real product
+                // versions are allowed to have up to four numeric components here.
+                if (candidate.IndexOf('.') < 0 && candidate.Length > 4)
                     continue;
                 if (candidate.Length <= 2 && (candidate == "32" || candidate == "64"))
                     continue;

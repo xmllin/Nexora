@@ -77,7 +77,8 @@ namespace Nexora.Pages
                             _resolvedInitialDownload = cachedInfo;
                             _main.CacheDownloadInfo(cachedInfo);
                             ApplyDownloadDetails(cachedInfo);
-                            await ResolveAndApplyVersionAsync(cachedInfo, resolveCts.Token);
+                            using (var versionCts = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+                                await ResolveAndApplyVersionAsync(cachedInfo, versionCts.Token);
                         }
                         else
                         {

@@ -35,6 +35,44 @@ namespace Nexora.Services.Downloads
             return first.Download;
         }
 
+        public async Task<string> GetLatestVersionAsync(AppDefinition app, CancellationToken token)
+        {
+            ValidateDefinition(app);
+
+            var winget = await ResolveWingetAsync(token).ConfigureAwait(false);
+            var args = new List<string>
+            {
+                "show",
+                "--id", app.Download.PackageId,
+                "--exact",
+                "--accept-source-agreements",
+                "--disable-interactivity"
+            };
+
+            var source = string.IsNullOrWhiteSpace(app.Download.PackageSource)
+                ? "winget"
+                : app.Download.PackageSource.Trim();
+
+            if (!string.IsNullOrWhiteSpace(source))
+            {
+                args.Add("--source");
+                args.Add(source);
+            }
+
+            var result = await RunProcessAsync(winget, args, token, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            if (result.ExitCode != 0)
+                throw new InvalidOperationException(
+                    "WinGet не смог получить последнюю версию для " + app.Download.PackageId +
+                    "." + FormatCommandError(result));
+
+            var version = ParseLatestVersion(result.StandardOutput);
+            if (string.IsNullOrWhiteSpace(version))
+                throw new InvalidOperationException(
+                    "WinGet не вернул поле Version для " + app.Download.PackageId + ".");
+
+            return version;
+        }
+
         public async Task<IReadOnlyList<AppRelease>> GetReleasesAsync(AppDefinition app, CancellationToken token)
         {
             ValidateDefinition(app);
@@ -60,12 +98,6 @@ namespace Nexora.Services.Downloads
                 args.Add(source);
             }
 
-            if (!string.IsNullOrWhiteSpace(app.Download.Architecture))
-            {
-                args.Add("--architecture");
-                args.Add(MapArchitecture(app.Download.Architecture));
-            }
-
             var result = await RunProcessAsync(winget, args, token, CommandTimeout).ConfigureAwait(false);
             if (result.ExitCode != 0)
                 throw new InvalidOperationException(
@@ -79,7 +111,6 @@ namespace Nexora.Services.Downloads
 
             return versions
                 .OrderByDescending(version => version, Comparer<string>.Create(CompareVersionStrings))
-                .Take(50)
                 .Select(version => CreateRelease(app, source, version))
                 .ToList();
         }
@@ -233,6 +264,32 @@ namespace Nexora.Services.Downloads
         /// Parses the version-only lines emitted by "winget show --versions".
         /// It intentionally ignores localized headings and unrelated metadata.
         /// </summary>
+        private static string ParseLatestVersion(string stdout)
+        {
+            if (string.IsNullOrWhiteSpace(stdout))
+                return string.Empty;
+
+            foreach (var line in stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var value = line.Trim();
+                var separator = value.IndexOf(':');
+                if (separator <= 0)
+                    continue;
+
+                var field = value.Substring(0, separator).Trim();
+                if (!string.Equals(field, "Version", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(field, "Версия", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var version = value.Substring(separator + 1).Trim();
+                var match = VersionLineRegex.Match(version);
+                if (match.Success)
+                    return version.TrimStart('v', 'V');
+            }
+
+            return string.Empty;
+        }
+
         public static List<string> ParseAvailableVersions(string stdout)
         {
             var result = new List<string>();

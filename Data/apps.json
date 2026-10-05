@@ -136,8 +136,7 @@
     "download": {
       "type": "WinGet",
       "packageId": "7zip.7zip",
-      "packageSource": "winget",
-      "architecture": "x64"
+      "packageSource": "winget"
     }
   },
   {

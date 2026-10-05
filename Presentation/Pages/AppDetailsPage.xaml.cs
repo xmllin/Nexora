@@ -21,6 +21,7 @@ namespace Nexora.Pages
         private readonly ChromiumDownloadProvider _chromium = new ChromiumDownloadProvider();
         private readonly OfficialPageDownloadProvider _official = new OfficialPageDownloadProvider();
         private readonly DownloadMetadataService _metadata = new DownloadMetadataService();
+        private readonly ApplicationVersionResolver _versionResolver = new ApplicationVersionResolver();
         private readonly AppDefinition _app;
         private IReadOnlyList<AppRelease> _releases;
         private DownloadInfo _displayedInfo;
@@ -76,6 +77,7 @@ namespace Nexora.Pages
                             _resolvedInitialDownload = cachedInfo;
                             _main.CacheDownloadInfo(cachedInfo);
                             ApplyDownloadDetails(cachedInfo);
+                            await ResolveAndApplyVersionAsync(cachedInfo, resolveCts.Token);
                         }
                         else
                         {
@@ -88,6 +90,7 @@ namespace Nexora.Pages
                                     _main.CacheDownloadInfo(resolved);
                                     _main.CacheAppDownloadInfo(_app, resolved);
                                     ApplyDownloadDetails(resolved);
+                                    await ResolveAndApplyVersionAsync(resolved, resolveCts.Token);
                                 }
                             }
                         }
@@ -102,7 +105,12 @@ namespace Nexora.Pages
                     }
                 }
 
-                ReleaseVersionText.Text = "Официальный установщик";
+                if (_resolvedInitialDownload != null)
+                    ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_resolvedInitialDownload.Version)
+                        ? "Не определена"
+                        : _resolvedInitialDownload.Version;
+                else
+                    ReleaseVersionText.Text = "Не определена";
                 return;
             }
 
@@ -191,18 +199,47 @@ namespace Nexora.Pages
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(info.Version) && !string.IsNullOrWhiteSpace(_app?.Download?.Url))
-                info.Version = VersionNormalizer.ExtractMostSpecific(_app.Download.FileName, _app.Download.Url);
+            var normalizedVersion = VersionNormalizer.ExtractMostSpecific(
+                info.Version,
+                info.FileName,
+                info.Url);
+
+            info.Version = normalizedVersion;
 
             if (!string.IsNullOrWhiteSpace(info.Url) && !_main.TryGetCachedAppDownloadInfo(_app, out _))
                 _main.CacheAppDownloadInfo(_app, info);
 
+            ReleaseVersionText.Text = string.IsNullOrWhiteSpace(info.Version) ? "Не определена" : info.Version;
             ReleaseFormatText.Text = info.Format;
             ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Не указан";
             if (!HasRealExtension(info.FileName) && !string.IsNullOrWhiteSpace(info.Url))
                 _ = LoadDownloadFileNameAsync(info);
             else if (!info.SizeBytes.HasValue && !string.IsNullOrWhiteSpace(info.Url))
                 _ = LoadDownloadSizeAsync(info);
+        }
+
+        private async Task ResolveAndApplyVersionAsync(DownloadInfo info, CancellationToken token)
+        {
+            try
+            {
+                var version = await _versionResolver.ResolveAsync(_app, info, token);
+                if (!string.IsNullOrWhiteSpace(version))
+                {
+                    info.Version = version;
+                    _main.CacheDownloadInfo(info);
+                    _main.CacheAppDownloadInfo(_app, info);
+                    if (ReferenceEquals(_displayedInfo, info) || ReferenceEquals(_resolvedInitialDownload, info))
+                        ReleaseVersionText.Text = version;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Version lookup is best-effort; the official download remains usable.
+            }
         }
 
         private async Task LoadDownloadFileNameAsync(DownloadInfo info)

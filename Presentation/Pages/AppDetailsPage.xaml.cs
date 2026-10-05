@@ -26,6 +26,7 @@ namespace Nexora.Pages
         private IReadOnlyList<AppRelease> _releases;
         private DownloadInfo _displayedInfo;
         private DownloadInfo _resolvedInitialDownload;
+        private string _latestVersion = string.Empty;
 
         public AppDetailsPage(MainWindow main, AppDefinition app)
         {
@@ -116,7 +117,12 @@ namespace Nexora.Pages
             }
 
             VersionComboBox.Visibility = Visibility.Visible;
-            if (_main.TryGetCachedReleases(_app, out var cachedReleases))
+            var wingetProvider = releaseProvider as WinGetDownloadProvider;
+
+            // WinGet is the source of truth for its version catalog, so do not use
+            // the potentially stale release cache here. This keeps the dropdown
+            // complete and current.
+            if (wingetProvider == null && _main.TryGetCachedReleases(_app, out var cachedReleases))
             {
                 ApplyReleases(cachedReleases);
                 return;
@@ -135,12 +141,34 @@ namespace Nexora.Pages
                 VersionComboBox.IsEnabled = false;
                 DownloadStatusText.Text = "Не удалось загрузить список версий.";
                 _main.ShowNotification("Не удалось загрузить список версий для «" + _app.Name + "». Проверьте подключение к интернету.", NotificationKind.Warning, "releases-timeout:" + (_app.Id ?? _app.Name));
+                return;
             }
             catch (Exception ex)
             {
                 VersionComboBox.IsEnabled = false;
                 DownloadStatusText.Text = "Не удалось получить версии.";
                 _main.ShowNotification("Не удалось получить версии «" + _app.Name + "»: " + NotificationFormatter.FormatGeneralError(ex), NotificationKind.Error, "releases-error:" + (_app.Id ?? _app.Name) + ":" + ex.GetType().FullName);
+                return;
+            }
+
+            if (wingetProvider != null)
+            {
+                try
+                {
+                    using (var latestCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                    {
+                        var latest = await wingetProvider.GetLatestVersionAsync(_app, latestCts.Token);
+                        if (!string.IsNullOrWhiteSpace(latest))
+                        {
+                            _latestVersion = latest;
+                            ReleaseVersionText.Text = latest;
+                        }
+                    }
+                }
+                catch
+                {
+                    // The version list is already available; keep its first item as fallback.
+                }
             }
         }
 
@@ -153,9 +181,12 @@ namespace Nexora.Pages
                 VersionComboBox.SelectedIndex = 0;
 
             DownloadStatusText.Text = _releases.Count == 0 ? "Стабильные версии не найдены." : string.Empty;
-            // This field is intentionally never changed in SelectionChanged.
-            if (_releases.Count > 0)
-                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_releases[0].Version) ? "Не определена" : _releases[0].Version;
+            // The field is "Последняя версия", so it must stay on the latest
+            // version even when the user selects an older release in the dropdown.
+            _latestVersion = _releases.Count > 0
+                ? (string.IsNullOrWhiteSpace(_releases[0].Version) ? string.Empty : _releases[0].Version)
+                : string.Empty;
+            ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_latestVersion) ? "Не определена" : _latestVersion;
 
             ApplyDownloadDetails(_releases.Count > 0 ? _releases[0].Download : null);
         }
@@ -210,7 +241,8 @@ namespace Nexora.Pages
             if (!string.IsNullOrWhiteSpace(info.Url) && !_main.TryGetCachedAppDownloadInfo(_app, out _))
                 _main.CacheAppDownloadInfo(_app, info);
 
-            ReleaseVersionText.Text = string.IsNullOrWhiteSpace(info.Version) ? "Не определена" : info.Version;
+            if (string.IsNullOrWhiteSpace(_latestVersion))
+                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(info.Version) ? "Не определена" : info.Version;
             ReleaseFormatText.Text = info.Format;
             ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Не указан";
             if (!HasRealExtension(info.FileName) && !string.IsNullOrWhiteSpace(info.Url))
@@ -227,6 +259,7 @@ namespace Nexora.Pages
                 if (!string.IsNullOrWhiteSpace(version))
                 {
                     info.Version = version;
+                    _latestVersion = version;
                     _main.CacheDownloadInfo(info);
                     _main.CacheAppDownloadInfo(_app, info);
                     if (ReferenceEquals(_displayedInfo, info) || ReferenceEquals(_resolvedInitialDownload, info))

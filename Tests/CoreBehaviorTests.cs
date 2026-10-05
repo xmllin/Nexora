@@ -42,6 +42,28 @@ namespace Nexora.Tests
             Assert.True(VersionNormalizer.Compare("1.2.10", "1.2.2") > 0);
         }
 
+
+        [Fact]
+        public void WinGetVersionParser_ExtractsAndDeduplicatesVersions()
+        {
+            var output = @"
+Available Versions
+------------------
+25.01
+24.12
+25.01
+1.2.10-beta
+Not a version
+";
+
+            var versions = WinGetDownloadProvider.ParseAvailableVersions(output);
+
+            Assert.Equal(3, versions.Count);
+            Assert.Contains("25.01", versions);
+            Assert.Contains("24.12", versions);
+            Assert.Contains("1.2.10-beta", versions);
+        }
+
         [Fact]
         public void FileValidator_RejectsHtmlAndAcceptsExpectedSignature()
         {

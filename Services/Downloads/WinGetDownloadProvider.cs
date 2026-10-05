@@ -78,7 +78,7 @@ namespace Nexora.Services.Downloads
                     "WinGet не вернул список версий для " + app.Download.PackageId + ".");
 
             return versions
-                .OrderByDescending(CompareVersionStrings)
+                .OrderByDescending(version => version, Comparer<string>.Create(CompareVersionStrings))
                 .Take(50)
                 .Select(version => CreateRelease(app, source, version))
                 .ToList();

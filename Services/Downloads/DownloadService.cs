@@ -85,24 +85,24 @@ namespace Nexora.Services.Downloads
 
                 var targetDir = DownloadSettings.GetFolder();
                 Directory.CreateDirectory(targetDir);
-                var target = GetUniquePath(Path.Combine(targetDir, SanitizeFileName(info.FileName)));
+                var managedTarget = GetUniquePath(Path.Combine(targetDir, SanitizeFileName(info.FileName)));
 
                 try
                 {
-                    var result = await provider.DownloadAsync(app, info, target, progress, token);
+                    var result = await provider.DownloadAsync(app, info, managedTarget, progress, token);
                     await FileValidator.ValidateAsync(result, app.Download, token);
                     AddHistory(app, result, info.Source ?? app.Download.Type);
                     return result;
                 }
                 catch (OperationCanceledException)
                 {
-                    TryDeleteFile(target);
+                    TryDeleteFile(managedTarget);
                     throw;
                 }
                 catch (Exception ex)
                 {
                     DownloadLog.Error("Ошибка managed-загрузки файла для " + app.Name + ".", ex);
-                    TryDeleteFile(target);
+                    TryDeleteFile(managedTarget);
                     throw;
                 }
             }

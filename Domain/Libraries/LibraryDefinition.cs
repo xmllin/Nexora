@@ -69,7 +69,7 @@ namespace Nexora.Models
                 {
                     case LibraryInstallStatus.Installed: return "Установлено";
                     case LibraryInstallStatus.UpdateAvailable: return "Доступно обновление";
-                    case LibraryInstallStatus.Manual: return "Не установлено";
+                    case LibraryInstallStatus.Manual: return "Ручная установка";
                     default: return "Не установлено";
                 }
             }

@@ -73,6 +73,103 @@ namespace Nexora.Services.Downloads
             return version;
         }
 
+        public async Task EnrichDownloadInfoAsync(AppDefinition app, DownloadInfo info, CancellationToken token)
+        {
+            ValidateDefinition(app);
+            if (info == null)
+                throw new InvalidOperationException("Не выбрана версия WinGet.");
+            if (string.IsNullOrWhiteSpace(info.Version))
+                throw new InvalidOperationException("У загрузки WinGet не указана версия.");
+
+            var winget = await ResolveWingetAsync(token).ConfigureAwait(false);
+            var args = new List<string>
+            {
+                "show",
+                "--id", info.PackageId ?? app.Download.PackageId,
+                "--exact",
+                "--version", info.Version,
+                "--accept-source-agreements",
+                "--disable-interactivity",
+                "--locale", "en-US"
+            };
+
+            var source = string.IsNullOrWhiteSpace(info.PackageSource)
+                ? (string.IsNullOrWhiteSpace(app.Download.PackageSource) ? "winget" : app.Download.PackageSource.Trim())
+                : info.PackageSource.Trim();
+
+            if (!string.IsNullOrWhiteSpace(source))
+            {
+                args.Add("--source");
+                args.Add(source);
+            }
+
+            var architecture = !string.IsNullOrWhiteSpace(info.Architecture)
+                ? info.Architecture
+                : app.Download.Architecture;
+            if (!string.IsNullOrWhiteSpace(architecture))
+            {
+                args.Add("--architecture");
+                args.Add(MapArchitecture(architecture));
+            }
+
+            var installerType = !string.IsNullOrWhiteSpace(info.InstallerType)
+                ? info.InstallerType
+                : app.Download.InstallerType;
+            if (!string.IsNullOrWhiteSpace(installerType))
+            {
+                args.Add("--installer-type");
+                args.Add(installerType);
+            }
+
+            var result = await RunProcessAsync(winget, args, token, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            if (result.ExitCode != 0)
+                return;
+
+            var installerUrl = ParseField(result.StandardOutput, "Installer Url", "Installer URL", "Install Url", "Install URL");
+            var resolvedType = ParseField(result.StandardOutput, "Installer Type");
+            if (!string.IsNullOrWhiteSpace(resolvedType))
+                info.InstallerType = resolvedType;
+
+            var actualVersion = ParseLatestVersion(result.StandardOutput);
+            if (!string.IsNullOrWhiteSpace(actualVersion))
+                info.Version = actualVersion;
+
+            if (string.IsNullOrWhiteSpace(installerUrl))
+                return;
+
+            var metadata = new DownloadMetadataService();
+            var probe = await metadata.ProbeAsync(installerUrl, token).ConfigureAwait(false);
+            info.Url = string.IsNullOrWhiteSpace(probe.FinalUrl) ? installerUrl : probe.FinalUrl;
+            if (!string.IsNullOrWhiteSpace(probe.FileName))
+                info.FileName = probe.FileName;
+            if (probe.SizeBytes.HasValue)
+                info.SizeBytes = probe.SizeBytes;
+            else
+                info.SizeBytes = await metadata.GetSizeAsync(info.Url, token).ConfigureAwait(false);
+        }
+
+        private static string ParseField(string output, params string[] fieldNames)
+        {
+            if (string.IsNullOrWhiteSpace(output) || fieldNames == null || fieldNames.Length == 0)
+                return string.Empty;
+
+            foreach (var line in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var value = line.Trim();
+                var separator = value.IndexOf(':');
+                if (separator <= 0)
+                    continue;
+
+                var field = value.Substring(0, separator).Trim();
+                if (!fieldNames.Any(name => string.Equals(field, name, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                return value.Substring(separator + 1).Trim();
+            }
+
+            return string.Empty;
+        }
+
         public async Task<IReadOnlyList<AppRelease>> GetReleasesAsync(AppDefinition app, CancellationToken token)
         {
             ValidateDefinition(app);

@@ -161,9 +161,7 @@ namespace Nexora.Pages
             {
                 VersionComboBox.SelectedIndex = selectedIndex;
                 var selected = _releases[selectedIndex];
-                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(selected.Version)
-                    ? "Не определена"
-                    : selected.Version;
+                ReleaseVersionText.Text = GetReleaseDisplayVersion(selected);
                 ApplyDownloadDetails(selected.Download);
 
                 _latestVersion = string.IsNullOrWhiteSpace(_releases[0].Version)
@@ -228,9 +226,10 @@ namespace Nexora.Pages
                 foreach (var item in group)
                 {
                     var version = string.IsNullOrWhiteSpace(item.Version) ? "Последняя" : item.Version;
+                    var displayVersion = string.IsNullOrWhiteSpace(item.DisplayVersion) ? version : item.DisplayVersion;
                     item.DisplayVersion = formats.Count > 1 && !string.IsNullOrWhiteSpace(item.Download.Format)
-                        ? version + " - " + item.Download.Format
-                        : version;
+                        ? displayVersion + " - " + item.Download.Format
+                        : displayVersion;
                 }
             }
             return unique;
@@ -255,7 +254,6 @@ namespace Nexora.Pages
                 _main.CacheAppDownloadInfo(_app, info);
 
             if ((_releases == null || _releases.Count == 0) &&
-                string.IsNullOrWhiteSpace(ReleaseVersionText.Text) ||
                 string.Equals(ReleaseVersionText.Text, "Не определена", StringComparison.OrdinalIgnoreCase))
                 ReleaseVersionText.Text = string.IsNullOrWhiteSpace(info.Version) ? "Не определена" : info.Version;
 
@@ -358,11 +356,20 @@ namespace Nexora.Pages
             if (!(VersionComboBox.SelectedItem is AppRelease release))
                 return;
 
-            ReleaseVersionText.Text = string.IsNullOrWhiteSpace(release.Version)
-                ? "Не определена"
-                : release.Version;
+            ReleaseVersionText.Text = GetReleaseDisplayVersion(release);
 
             ApplyDownloadDetails(release.Download);
+        }
+
+        private static string GetReleaseDisplayVersion(AppRelease release)
+        {
+            if (release == null)
+                return "Не определена";
+
+            if (!string.IsNullOrWhiteSpace(release.DisplayVersion))
+                return release.DisplayVersion;
+
+            return string.IsNullOrWhiteSpace(release.Version) ? "Не определена" : release.Version;
         }
 
         private static bool HasRealExtension(string value)

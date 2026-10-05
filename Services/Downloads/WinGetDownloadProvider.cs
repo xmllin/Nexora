@@ -21,6 +21,7 @@ namespace Nexora.Services.Downloads
     public sealed class WinGetDownloadProvider : IDownloadProvider, IReleaseDownloadProvider, IManagedDownloadProvider
     {
         private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(5);
+        private static readonly Regex PackageIdRegex = new Regex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
         private static readonly Regex VersionLineRegex = new Regex(
             @"^v?([0-9]+(?:\.[0-9]+){0,15}(?:[-+][0-9A-Za-z.-]+)?)$",
             RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -434,6 +435,8 @@ namespace Nexora.Services.Downloads
 
             if (string.IsNullOrWhiteSpace(app.Download.PackageId))
                 throw new InvalidOperationException("Для WinGet не указан PackageId.");
+            if (!PackageIdRegex.IsMatch(app.Download.PackageId.Trim()))
+                throw new InvalidOperationException("Некорректный PackageId WinGet: " + app.Download.PackageId);
         }
 
         private static string MapArchitecture(string architecture)

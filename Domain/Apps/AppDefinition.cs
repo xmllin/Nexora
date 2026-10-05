@@ -38,5 +38,6 @@ namespace Nexora.Models
         public string PackageId { get; set; }
         public string PackageSource { get; set; }
         public string InstallerType { get; set; }
+        public bool IncludePrerelease { get; set; }
     }
 }

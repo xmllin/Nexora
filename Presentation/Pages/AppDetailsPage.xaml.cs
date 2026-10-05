@@ -181,14 +181,23 @@ namespace Nexora.Pages
                 VersionComboBox.SelectedIndex = 0;
 
             DownloadStatusText.Text = _releases.Count == 0 ? "Стабильные версии не найдены." : string.Empty;
-            // The field is "Последняя версия", so it must stay on the latest
-            // version even when the user selects an older release in the dropdown.
+            // The first item is the latest version returned by WinGet.
             _latestVersion = _releases.Count > 0
                 ? (string.IsNullOrWhiteSpace(_releases[0].Version) ? string.Empty : _releases[0].Version)
                 : string.Empty;
-            ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_latestVersion) ? "Не определена" : _latestVersion;
 
-            ApplyDownloadDetails(_releases.Count > 0 ? _releases[0].Download : null);
+            if (_releases.Count > 0)
+            {
+                ReleaseVersionText.Text = string.IsNullOrWhiteSpace(_releases[0].Version)
+                    ? "Не определена"
+                    : _releases[0].Version;
+                ApplyDownloadDetails(_releases[0].Download);
+            }
+            else
+            {
+                ReleaseVersionText.Text = "Не определена";
+                ApplyDownloadDetails(null);
+            }
         }
 
         private static List<AppRelease> PrepareReleaseItems(IEnumerable<AppRelease> releases)
@@ -311,8 +320,15 @@ namespace Nexora.Pages
         private void VersionComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!IsInitialized) return;
-            if (VersionComboBox.SelectedItem is AppRelease release)
-                ApplyDownloadDetails(release.Download);
+            if (!(VersionComboBox.SelectedItem is AppRelease release))
+                return;
+
+            // "Текущая версия" is the version currently selected for download.
+            ReleaseVersionText.Text = string.IsNullOrWhiteSpace(release.Version)
+                ? "Не определена"
+                : release.Version;
+
+            ApplyDownloadDetails(release.Download);
         }
 
         private static bool HasRealExtension(string value)

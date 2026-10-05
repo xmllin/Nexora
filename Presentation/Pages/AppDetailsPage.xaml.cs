@@ -367,7 +367,12 @@ namespace Nexora.Pages
             if (release == null)
                 return "Не определена";
 
-            if (!string.IsNullOrWhiteSpace(release.DisplayVersion))
+            // Chromium uses a numeric revision internally for sorting, while the
+            // UI must explicitly identify it as a revision. Other applications
+            // keep the pure version here, so a format suffix never leaks into
+            // the "Текущая версия" field.
+            if (string.Equals(release.Download?.Source, "Chromium", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(release.DisplayVersion))
                 return release.DisplayVersion;
 
             return string.IsNullOrWhiteSpace(release.Version) ? "Не определена" : release.Version;

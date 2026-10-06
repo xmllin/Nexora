@@ -62,7 +62,6 @@ namespace Nexora.Services.Downloads
                     }
                 }
                 info.Version = VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url, version);
-                if (string.IsNullOrWhiteSpace(info.Version)) info.Version = "Последняя";
                 if (releases.Any(item => string.Equals(item.Download.Url, info.Url, StringComparison.OrdinalIgnoreCase))) continue;
                 releases.Add(new AppRelease
                 {

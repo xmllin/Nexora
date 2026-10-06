@@ -676,6 +676,9 @@ namespace Nexora.Pages
                 return;
             }
 
+            CancellationTokenSource downloadCancellation = null;
+            PauseController downloadPauseController = null;
+
             try
             {
                 var progress = new Progress<DownloadProgress>(p =>
@@ -689,8 +692,8 @@ namespace Nexora.Pages
                 item.DownloadCancellation?.Dispose();
                 item.DownloadPauseController?.Dispose();
 
-                var downloadCancellation = new CancellationTokenSource();
-                var downloadPauseController = new PauseController();
+                downloadCancellation = new CancellationTokenSource();
+                downloadPauseController = new PauseController();
                 var downloadToken = downloadCancellation.Token;
 
                 item.DownloadCancellation = downloadCancellation;
@@ -788,13 +791,19 @@ namespace Nexora.Pages
             }
             finally
             {
-                if (ReferenceEquals(item.DownloadPauseController, downloadPauseController))
-                    item.DownloadPauseController = null;
-                if (ReferenceEquals(item.DownloadCancellation, downloadCancellation))
-                    item.DownloadCancellation = null;
+                if (downloadPauseController != null)
+                {
+                    if (ReferenceEquals(item.DownloadPauseController, downloadPauseController))
+                        item.DownloadPauseController = null;
+                    downloadPauseController.Dispose();
+                }
 
-                downloadPauseController.Dispose();
-                downloadCancellation.Dispose();
+                if (downloadCancellation != null)
+                {
+                    if (ReferenceEquals(item.DownloadCancellation, downloadCancellation))
+                        item.DownloadCancellation = null;
+                    downloadCancellation.Dispose();
+                }
 
                 item.Notify(nameof(item.IsPaused));
                 item.Notify(nameof(item.CanPauseDownload));

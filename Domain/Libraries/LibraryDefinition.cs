@@ -53,6 +53,7 @@ namespace Nexora.Models
         public bool IsBusy { get; set; }
         public bool IsDeleting { get; set; }
         public bool IsRecommended { get; set; }
+        public bool ShowRecommended => IsRecommended && !IsInstalled;
         public CancellationTokenSource DownloadCancellation { get; set; }
         public PauseController DownloadPauseController { get; set; }
         public bool IsPaused => DownloadPauseController != null && DownloadPauseController.IsPaused;

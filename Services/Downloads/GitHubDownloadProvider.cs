@@ -20,7 +20,7 @@ namespace Nexora.Services.Downloads
         private static readonly object ReleaseCacheLock = new object();
         private static readonly TimeSpan ReleaseCacheLifetime = TimeSpan.FromMinutes(10);
         private static readonly TimeSpan PersistentStaleCacheLifetime = TimeSpan.FromDays(7);
-        private const int PersistentCacheSchemaVersion = 5;
+        private const int PersistentCacheSchemaVersion = 6;
         private static readonly string PersistentCacheFile = UserDataPath.File("github_releases_cache.json");
 
         private sealed class ReleaseCacheEntry

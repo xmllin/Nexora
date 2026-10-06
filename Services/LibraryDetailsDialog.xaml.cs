@@ -49,15 +49,45 @@ namespace Nexora.Services
 
         private void AddRow(string label, string value, bool warning = false)
         {
-            var row = DetailsGrid.RowDefinitions.Count;
+            var contentRow = DetailsGrid.RowDefinitions.Count;
             DetailsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var labelText = new TextBlock { Text = string.IsNullOrWhiteSpace(label) ? "—" : label, Style = (Style)FindResource("Label") };
-            var valueText = new TextBlock { Text = string.IsNullOrWhiteSpace(value) ? "—" : value, Style = (Style)FindResource("Value") };
-            if (warning) valueText.Foreground = new SolidColorBrush(Color.FromRgb(255, 211, 78));
-            var line = new Border { Height = 1, Background = new SolidColorBrush(Color.FromRgb(28, 58, 94)), Margin = new Thickness(0, 7, 0, 7) };
-            Grid.SetRow(labelText, row); Grid.SetColumn(labelText, 0);
-            Grid.SetRow(valueText, row); Grid.SetColumn(valueText, 1);
-            DetailsGrid.Children.Add(labelText); DetailsGrid.Children.Add(valueText);
+
+            var labelText = new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(label) ? "—" : label,
+                Style = (Style)FindResource("Label"),
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            var valueText = new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(value) ? "—" : value,
+                Style = (Style)FindResource("Value"),
+                VerticalAlignment = VerticalAlignment.Top
+            };
+
+            if (warning)
+                valueText.Foreground = new SolidColorBrush(Color.FromRgb(255, 211, 78));
+
+            Grid.SetRow(labelText, contentRow);
+            Grid.SetColumn(labelText, 0);
+            Grid.SetRow(valueText, contentRow);
+            Grid.SetColumn(valueText, 1);
+            DetailsGrid.Children.Add(labelText);
+            DetailsGrid.Children.Add(valueText);
+
+            var lineRow = DetailsGrid.RowDefinitions.Count;
+            DetailsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var line = new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromRgb(28, 58, 94)),
+                Margin = new Thickness(0, 9, 0, 9)
+            };
+            Grid.SetRow(line, lineRow);
+            Grid.SetColumn(line, 0);
+            Grid.SetColumnSpan(line, 2);
+            DetailsGrid.Children.Add(line);
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

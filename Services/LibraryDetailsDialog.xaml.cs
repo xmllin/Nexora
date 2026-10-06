@@ -97,7 +97,7 @@ namespace Nexora.Services
             {
                 Height = 1,
                 Background = new SolidColorBrush(Color.FromRgb(28, 58, 94)),
-                Margin = new Thickness(0, 8, 0, 8)
+                Margin = new Thickness(0, 0, 0, 0)
             };
             Grid.SetRow(line, lineRow);
             Grid.SetColumn(line, 0);

@@ -322,8 +322,7 @@ namespace Nexora.Pages
 
             if (!info.SizeBytes.HasValue)
             {
-                if (string.Equals(info.PackageId, _app.Download?.PackageId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
                     _ = LoadWinGetDownloadMetadataAsync(info);
                 else if (!string.IsNullOrWhiteSpace(info.Url) &&
                          Uri.TryCreate(info.Url, UriKind.Absolute, out var infoUri) &&

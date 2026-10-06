@@ -129,6 +129,31 @@ namespace Nexora.Services.Libraries
             }
         }
 
+        public bool HasRepairCommand(LibraryDefinition definition)
+        {
+            if (definition == null)
+                return false;
+
+            var command = FindRepairCommand(definition);
+            if (string.IsNullOrWhiteSpace(command))
+                return false;
+
+            try
+            {
+                SplitExecutableAndArguments(command, out var fileName, out _);
+                if (string.IsNullOrWhiteSpace(fileName))
+                    return false;
+
+                fileName = fileName.Trim().Trim('"');
+                return File.Exists(Environment.ExpandEnvironmentVariables(fileName)) ||
+                       string.Equals(Path.GetFileName(fileName), "msiexec.exe", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public async Task RepairAsync(LibraryDefinition definition, CancellationToken token)
         {
             if (definition == null) throw new InvalidOperationException("Компонент не указан.");

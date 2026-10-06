@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Input;
 using Nexora.Models;
 
 namespace Nexora.Services
@@ -88,6 +89,21 @@ namespace Nexora.Services
             Grid.SetColumn(line, 0);
             Grid.SetColumnSpan(line, 2);
             DetailsGrid.Children.Add(line);
+        }
+
+        private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Left)
+                return;
+
+            try
+            {
+                DragMove();
+            }
+            catch (InvalidOperationException)
+            {
+                // The window may already be closing.
+            }
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

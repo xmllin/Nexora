@@ -62,28 +62,19 @@ namespace Nexora.Services.Libraries
             if (definition == null || string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
                 throw new InvalidOperationException("Файл установщика не найден.");
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = installerPath,
-                UseShellExecute = true,
-                Verb = "runas",
-                WorkingDirectory = Path.GetDirectoryName(installerPath)
-                    ?? Environment.GetFolderPath(Environment.SpecialFolder.System)
-            };
+            var script = BuildStartProcessScript(
+                installerPath,
+                string.Empty,
+                waitForExit: true);
 
-            using (var process = Process.Start(startInfo))
-            {
-                if (process == null) throw new InvalidOperationException("Не удалось открыть установщик.");
-                await process.WaitForExitAsync(token);
+            var exitCode = await RunHiddenPowerShellAsync(script, token);
 
-                if (process.ExitCode == 1602 || process.ExitCode == 1223)
-                    throw new OperationCanceledException();
+            if (exitCode == 1602 || exitCode == 1223)
+                throw new OperationCanceledException();
 
-                if (process.ExitCode != 0 && process.ExitCode != 3010 && process.ExitCode != 1638)
-                    throw new InvalidOperationException("Установщик завершился с кодом " + process.ExitCode + ".");
-            }
+            if (exitCode != 0 && exitCode != 3010 && exitCode != 1638)
+                throw new InvalidOperationException("Установщик завершился с кодом " + exitCode + ".");
         }
-
 
         public async Task InstallWindowsFeatureAsync(LibraryDefinition definition, CancellationToken token)
         {
@@ -157,6 +148,23 @@ namespace Nexora.Services.Libraries
             if (definition == null)
                 throw new InvalidOperationException("Компонент не указан.");
 
+            // WinGet has a stable package identity for the current v14 VC++ Redistributables.
+            // Use it first, entirely hidden through PowerShell, instead of relying on a
+            // possibly stale Package Cache uninstaller.
+            var wingetId = GetWingetId(definition);
+            if (!string.IsNullOrWhiteSpace(wingetId))
+            {
+                var wingetScript = "winget uninstall --id '" + EscapePowerShellSingleQuoted(wingetId) +
+                    "' --exact --silent --disable-interactivity --accept-source-agreements --accept-package-agreements";
+
+                var wingetExitCode = await RunHiddenPowerShellAsync(
+                    "$ErrorActionPreference = 'Stop'; " + wingetScript,
+                    token);
+
+                if (wingetExitCode == 0 || wingetExitCode == 3010)
+                    return;
+            }
+
             var names = BuildDisplayNameCandidates(definition);
             if (names.Length == 0)
                 throw new InvalidOperationException("Не удалось определить название компонента для удаления.");
@@ -197,6 +205,27 @@ namespace Nexora.Services.Libraries
                 await process.WaitForExitAsync(token);
                 return process.ExitCode;
             }
+        }
+
+        private static string BuildStartProcessScript(string filePath, string arguments, bool waitForExit)
+        {
+            var escapedFile = EscapePowerShellSingleQuoted(filePath);
+            var escapedArguments = EscapePowerShellSingleQuoted(arguments ?? string.Empty);
+            var escapedWorkingDirectory = EscapePowerShellSingleQuoted(
+                Path.GetDirectoryName(filePath) ?? Environment.GetFolderPath(Environment.SpecialFolder.System));
+
+            var lines = new[]
+            {
+                "$ErrorActionPreference = 'Stop'",
+                "$file = '" + escapedFile + "'",
+                "$args = '" + escapedArguments + "'",
+                "$work = '" + escapedWorkingDirectory + "'",
+                "if (-not (Test-Path -LiteralPath $file)) { throw \"Файл установщика не найден: $file\" }",
+                "$p = Start-Process -FilePath $file -ArgumentList $args -WorkingDirectory $work -Wait -PassThru -WindowStyle Hidden",
+                "exit $p.ExitCode"
+            };
+
+            return string.Join(Environment.NewLine, lines);
         }
 
         private static string BuildHiddenUninstallScript(string[] names, string category)
@@ -283,6 +312,22 @@ namespace Nexora.Services.Libraries
             };
 
             return string.Join(Environment.NewLine, lines);
+        }
+
+        private static string GetWingetId(LibraryDefinition definition)
+        {
+            if (definition == null)
+                return string.Empty;
+
+            switch (definition.Id)
+            {
+                case "vcpp-2015-2026-x64":
+                    return "Microsoft.VCRedist.2015+.x64";
+                case "vcpp-2015-2026-x86":
+                    return "Microsoft.VCRedist.2015+.x86";
+                default:
+                    return string.Empty;
+            }
         }
 
         private static string EscapePowerShellSingleQuoted(string value)

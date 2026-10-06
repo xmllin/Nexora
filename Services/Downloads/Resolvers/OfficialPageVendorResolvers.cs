@@ -386,12 +386,12 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
                 .ToList();
 
             var architecture = PlatformDetectionService.Current.Architecture;
-            var platform = architecture == "x86" ? "win32" : "win64";
+            var platform = architecture == "x86" ? "i686" : "x86_64";
             var releases = new List<AppRelease>();
 
             foreach (var version in versions)
             {
-                var fileName = "torbrowser-install-" + platform + "-" + version + ".exe";
+                var fileName = "tor-browser-windows-" + platform + "-portable-" + version + ".exe";
                 var url = root + version + "/" + fileName;
                 var info = CreateInfo(url, fileName, "Tor Browser");
                 info.Version = version;
@@ -437,6 +437,7 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
                 .Cast<Match>()
                 .Select(m => m.Groups["version"].Value)
+                .Where(v => VersionInfo.Parse(v).CompareTo(VersionInfo.Parse("42.0")) >= 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderByDescending(v => VersionInfo.Parse(v))
                 .ToList();
@@ -632,6 +633,7 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
                 .Cast<Match>()
                 .Select(m => m.Groups["version"].Value)
+                .Where(v => VersionInfo.Parse(v).CompareTo(VersionInfo.Parse("42.0.2393.85")) >= 0)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderByDescending(v => VersionInfo.Parse(v))
                 .ToList();

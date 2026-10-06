@@ -822,12 +822,16 @@ namespace Nexora.Pages
 
         private static void OpenFolder(string folder)
         {
-            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
+            if (string.IsNullOrWhiteSpace(folder)) return;
             try
             {
+                // Do not query the directory contents before opening it.
+                // Explorer can handle a folder that was just created, while
+                // Directory.Exists can synchronously block on an unavailable path.
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = folder,
+                    FileName = "explorer.exe",
+                    Arguments = "\""+folder.Replace("\"", "\\\"")+"\"",
                     UseShellExecute = true
                 });
             }

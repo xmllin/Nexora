@@ -99,7 +99,7 @@
             </StackPanel>
         </DataTemplate>
         <Style x:Key="LibraryFilterComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="Width" Value="210"/>
+            <Setter Property="Width" Value="220"/>
             <Setter Property="Height" Value="38"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="Background" Value="#0F2035"/>
@@ -154,6 +154,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#173250"/></Trigger>
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#173250"/></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -385,9 +386,21 @@
                             </StackPanel>
                         </Grid>
                         <Grid Grid.Row="2" Margin="0,7,0,0">
-                            <StackPanel>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding ProgressText}" Opacity="{Binding ProgressOpacity}" Foreground="{StaticResource MutedBrush}" FontSize="10" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
-                                <ProgressBar Height="8" Margin="0,8,0,0" Opacity="{Binding ProgressOpacity}" Maximum="100" Value="{Binding Progress}" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
+                                <ProgressBar Height="8" Margin="0,8,8,0" Opacity="{Binding ProgressOpacity}" Maximum="100" Value="{Binding Progress}" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}">
+                                <Button Tag="{Binding}" Click="PauseLibraryDownload_Click" Content="Ⅱ" Width="28" Height="26" Margin="0,6,4,0" Padding="0"
+                                        IsEnabled="{Binding CanPauseDownload}" Style="{StaticResource GhostButton}" ToolTip="Пауза"/>
+                                <Button Tag="{Binding}" Click="ResumeLibraryDownload_Click" Content="▶" Width="28" Height="26" Margin="0,6,4,0" Padding="0"
+                                        IsEnabled="{Binding CanResumeDownload}" Style="{StaticResource GhostButton}" ToolTip="Возобновить"/>
+                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Content="×" Width="28" Height="26" Margin="0,6,0,0" Padding="0"
+                                        IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}" ToolTip="Отменить"/>
                             </StackPanel>
                         </Grid>
                     </Grid>
@@ -420,8 +433,8 @@
                 </Border>
                 <Grid Margin="5,0,5,12">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="210"/>
-                        <ColumnDefinition Width="180"/>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="220"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <ComboBox Grid.Column="0" x:Name="CategoryComboBox" Style="{StaticResource LibraryFilterComboBoxStyle}" Margin="0,0,8,0" SelectionChanged="FilterChanged"/>

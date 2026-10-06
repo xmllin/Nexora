@@ -1,13 +1,17 @@
 [
   {
-    "id": "vcpp-2015-2022-x64",
-    "name": "Microsoft Visual C++ Redistributable 2015–2022 (v14) x64",
+    "id": "vcpp-2015-2026-x64",
+    "name": "Visual C++ 2015–2026 x64",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для 64-разрядных игр и программ.",
     "purpose": "Запуск множества современных игр и настольных приложений.",
     "componentType": "Базовый компонент",
     "architectures": [
-      "x64"
+      "x64",
+      "arm64"
+    ],
+    "recommendationTags": [
+      "vcpp-v14-x64"
     ],
     "versionRule": "Актуальная версия Microsoft",
     "sourceUrl": "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist",
@@ -26,8 +30,8 @@
     ]
   },
   {
-    "id": "vcpp-2015-2022-x86",
-    "name": "Microsoft Visual C++ Redistributable 2015–2022 (v14) x86",
+    "id": "vcpp-2015-2026-x86",
+    "name": "Visual C++ 2015–2026 x86",
     "category": "Visual C++ Redistributable",
     "description": "32-разрядные библиотеки Visual C++ для совместимости с приложениями x86.",
     "purpose": "Запуск 32-разрядных игр и программ, в том числе на Windows x64.",
@@ -35,6 +39,9 @@
     "architectures": [
       "x86",
       "x64"
+    ],
+    "recommendationTags": [
+      "vcpp-v14-x86"
     ],
     "versionRule": "Актуальная версия Microsoft",
     "sourceUrl": "https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist",
@@ -62,6 +69,9 @@
     "description": "Библиотеки Visual C++ для старых и некоторых современных приложений.",
     "purpose": "Обеспечение совместимости с программами, собранными в Visual Studio 2013.",
     "componentType": "Совместимость",
+    "recommendationTags": [
+      "vcpp-2013-dependency"
+    ],
     "architectures": [
       "x86",
       "x64"

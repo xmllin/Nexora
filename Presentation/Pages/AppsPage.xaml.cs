@@ -82,7 +82,9 @@ namespace Nexora.Pages
                 }
                 ApplyFilter();
                 LoadingText.Text = "";
-                Dispatcher.BeginInvoke(new Action(UpdateAdaptivePageSize), System.Windows.Threading.DispatcherPriority.Loaded);
+                await Dispatcher.InvokeAsync(
+                    UpdateAdaptivePageSize,
+                    System.Windows.Threading.DispatcherPriority.Loaded);
 
                 _hardwareTask = LoadSystemRecommendationTagsAsync();
             }

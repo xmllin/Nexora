@@ -94,6 +94,12 @@
                             <ColumnDefinition Width="170"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0"
+                                Width="1"
+                                HorizontalAlignment="Right"
+                                Background="#1C3A5E"
+                                Margin="0"
+                                IsHitTestVisible="False"/>
                     </Grid>
                 </StackPanel>
             </ScrollViewer>

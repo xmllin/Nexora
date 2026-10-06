@@ -1,7 +1,7 @@
 [
   {
     "id": "vcpp-2015-2026-x64",
-    "name": "Visual C++ 2015–2026 x64",
+    "name": "Microsoft Visual C++ Redistributable 2015–2026 (x64)",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для 64-разрядных игр и программ.",
     "purpose": "Запуск множества современных игр и настольных приложений.",
@@ -31,7 +31,7 @@
   },
   {
     "id": "vcpp-2015-2026-x86",
-    "name": "Visual C++ 2015–2026 x86",
+    "name": "Microsoft Visual C++ Redistributable 2015–2026 (x86)",
     "category": "Visual C++ Redistributable",
     "description": "32-разрядные библиотеки Visual C++ для совместимости с приложениями x86.",
     "purpose": "Запуск 32-разрядных игр и программ, в том числе на Windows x64.",
@@ -64,7 +64,7 @@
   },
   {
     "id": "vcpp-2013",
-    "name": "Microsoft Visual C++ 2013",
+    "name": "Microsoft Visual C++ 2013 Redistributable (x64)",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для старых и некоторых современных приложений.",
     "purpose": "Обеспечение совместимости с программами, собранными в Visual Studio 2013.",
@@ -95,7 +95,7 @@
   },
   {
     "id": "vcpp-2012",
-    "name": "Microsoft Visual C++ 2012",
+    "name": "Microsoft Visual C++ 2012 Redistributable (x64)",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для приложений, собранных в Visual Studio 2012.",
     "purpose": "Совместимость со старыми играми и программами.",
@@ -123,7 +123,7 @@
   },
   {
     "id": "vcpp-2010",
-    "name": "Microsoft Visual C++ 2010",
+    "name": "Microsoft Visual C++ 2010 Redistributable (x64)",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для старых приложений и игр.",
     "purpose": "Совместимость с программами, собранными в Visual Studio 2010.",
@@ -151,7 +151,7 @@
   },
   {
     "id": "vcpp-2008",
-    "name": "Microsoft Visual C++ 2008",
+    "name": "Microsoft Visual C++ 2008 Redistributable (x64)",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для устаревших приложений.",
     "purpose": "Совместимость со старыми играми и программами.",
@@ -179,7 +179,7 @@
   },
   {
     "id": "vcpp-2005",
-    "name": "Microsoft Visual C++ 2005",
+    "name": "Microsoft Visual C++ 2005 Redistributable (x86)",
     "category": "Visual C++ Redistributable",
     "description": "Библиотеки Visual C++ для очень старых приложений.",
     "purpose": "Совместимость с legacy-программами и играми.",

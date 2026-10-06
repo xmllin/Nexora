@@ -196,6 +196,8 @@ namespace Nexora.Pages
                 item.IsBusy = true;
                 item.Notify(nameof(item.IsBusy));
                 item.Notify(nameof(item.ShowProgress));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = "Восстановление: " + item.Definition.Name;
                 if (item.IsWindowsFeature)
                     await _installation.InstallWindowsFeatureAsync(item.Definition, CancellationToken.None);
@@ -566,6 +568,8 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.IsBusy));
                 item.Notify(nameof(item.ProgressText));
                 item.Notify(nameof(item.ShowProgress));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = "Загрузка отменена: " + item.Definition.Name;
             }
             catch (Exception ex)
@@ -574,8 +578,20 @@ namespace Nexora.Pages
                 item.ShowProgress = false;
                 item.Notify(nameof(item.IsBusy));
                 item.Notify(nameof(item.ShowProgress));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = "Ошибка загрузки: " + ex.Message;
                 AppDialog.ShowInfo(Window.GetWindow(this), item.Definition.Name, ex.Message);
+            }
+            finally
+            {
+                item.DownloadPauseController?.Dispose();
+                item.DownloadCancellation?.Dispose();
+                item.DownloadPauseController = null;
+                item.DownloadCancellation = null;
+                item.Notify(nameof(item.IsPaused));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
             }
         }
 

@@ -395,12 +395,25 @@
                                 <ProgressBar Height="8" Margin="0,8,8,0" Opacity="{Binding ProgressOpacity}" Maximum="100" Value="{Binding Progress}" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}">
-                                <Button Tag="{Binding}" Click="PauseLibraryDownload_Click" Content="Ⅱ" Width="28" Height="26" Margin="0,6,4,0" Padding="0"
-                                        IsEnabled="{Binding CanPauseDownload}" Style="{StaticResource GhostButton}" ToolTip="Пауза"/>
-                                <Button Tag="{Binding}" Click="ResumeLibraryDownload_Click" Content="▶" Width="28" Height="26" Margin="0,6,4,0" Padding="0"
-                                        IsEnabled="{Binding CanResumeDownload}" Style="{StaticResource GhostButton}" ToolTip="Возобновить"/>
-                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Content="×" Width="28" Height="26" Margin="0,6,0,0" Padding="0"
-                                        IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}" ToolTip="Отменить"/>
+                                <Button Tag="{Binding}" Click="PauseResumeLibraryDownload_Click" Width="28" Height="26" Margin="0,6,4,0" Padding="0"
+                                        IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}">
+                                    <Image Width="15" Height="15">
+                                        <Image.Style>
+                                            <Style TargetType="Image">
+                                                <Setter Property="Source" Value="{local:SvgImage Source=interface/white/player-pause.svg}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                                                        <Setter Property="Source" Value="{local:SvgImage Source=interface/white/player-play.svg}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Image.Style>
+                                    </Image>
+                                </Button>
+                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Width="28" Height="26" Margin="0,6,0,0" Padding="0"
+                                        IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}" ToolTip="Отменить">
+                                    <Image Source="{local:SvgImage Source=interface/white/fluent-dismiss.svg}" Width="15" Height="15"/>
+                                </Button>
                             </StackPanel>
                         </Grid>
                     </Grid>

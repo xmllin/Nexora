@@ -338,7 +338,7 @@
                                         </Style>
                                     </ToggleButton.Style>
                                 </ToggleButton>
-                                <Button Tag="{Binding}" Click="Repair_Click" Cursor="Hand" Padding="10,6" Margin="0,0,6,0" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
+                                <Button Tag="{Binding}" Click="Reinstall_Click" Cursor="Hand" Padding="10,6" Margin="0,0,6,0" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}">
                                     <StackPanel Orientation="Horizontal"><Image Source="{local:SvgImage Source=interface/white/download.svg}" Width="15" Height="15" Margin="0,0,6,0"/><TextBlock Text="Переустановить"/></StackPanel>
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">

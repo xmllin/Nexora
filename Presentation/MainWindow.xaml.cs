@@ -59,7 +59,7 @@ namespace Nexora
             public string Message { get; set; }
             public NotificationKind Kind { get; set; }
         }
-        private const int DownloadCacheSchemaVersion = 9;
+        private const int DownloadCacheSchemaVersion = 10;
         private static readonly string CacheFile = UserDataPath.File("download_metadata_cache.json");
         private string _previousPage = "home";
         private string _currentPage = "home";

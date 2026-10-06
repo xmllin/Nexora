@@ -30,6 +30,8 @@ namespace Nexora.Pages
         private CancellationTokenSource _installCts;
         private bool _loading;
         private Window _hostWindow;
+        private readonly HashSet<Task> _activeDownloads = new HashSet<Task>();
+        private bool _closingAfterDownloadCancellation;
 
         public LibrariesPage()
         {
@@ -59,7 +61,11 @@ namespace Nexora.Pages
                 LibrariesItems.ItemsSource = _view;
                 UpdateSummary();
                 _hostWindow = Window.GetWindow(this);
-                if (_hostWindow != null) _hostWindow.Activated += HostWindow_Activated;
+                if (_hostWindow != null)
+                {
+                    _hostWindow.Activated += HostWindow_Activated;
+                    _hostWindow.Closing += HostWindow_Closing;
+                }
             }
             catch (Exception ex)
             {
@@ -69,8 +75,43 @@ namespace Nexora.Pages
 
         private void LibrariesPage_Unloaded(object sender, RoutedEventArgs e)
         {
-            if (_hostWindow != null) _hostWindow.Activated -= HostWindow_Activated;
+            if (_hostWindow != null)
+            {
+                _hostWindow.Activated -= HostWindow_Activated;
+                _hostWindow.Closing -= HostWindow_Closing;
+            }
             _hostWindow = null;
+        }
+
+        private async void HostWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (_closingAfterDownloadCancellation)
+                return;
+
+            var active = _activeDownloads.Where(task => task != null && !task.IsCompleted).ToArray();
+            if (active.Length == 0)
+                return;
+
+            e.Cancel = true;
+
+            foreach (var item in _items.Where(item => item.IsBusy))
+            {
+                try { item.DownloadCancellation?.Cancel(); } catch { }
+                try { item.DownloadPauseController?.Resume(); } catch { }
+            }
+
+            try
+            {
+                await Task.WhenAll(active);
+            }
+            catch { }
+
+            foreach (var item in _items)
+                DeleteDownloadedFileNow(item);
+
+            _closingAfterDownloadCancellation = true;
+            if (_hostWindow != null)
+                _hostWindow.Close();
         }
 
         private void HostWindow_Activated(object sender, EventArgs e)
@@ -277,14 +318,18 @@ namespace Nexora.Pages
         {
             var item = (sender as Button)?.Tag as LibraryItem;
             if (item == null) return;
-            await DownloadLibraryAsync(item, installAfterDownload: false);
+            var task = DownloadLibraryAsync(item, installAfterDownload: false);
+            _activeDownloads.Add(task);
+            try { await task; } finally { _activeDownloads.Remove(task); }
         }
 
         private async void DownloadAndInstall_Click(object sender, RoutedEventArgs e)
         {
             var item = (sender as Button)?.Tag as LibraryItem;
             if (item == null) return;
-            await DownloadLibraryAsync(item, installAfterDownload: true);
+            var task = DownloadLibraryAsync(item, installAfterDownload: true);
+            _activeDownloads.Add(task);
+            try { await task; } finally { _activeDownloads.Remove(task); }
         }
 
         private async void WindowsFeatureToggle_Click(object sender, RoutedEventArgs e)
@@ -558,6 +603,7 @@ namespace Nexora.Pages
                 item.DownloadPauseController?.Dispose();
                 item.DownloadCancellation = new CancellationTokenSource();
                 item.DownloadPauseController = new PauseController();
+                item.DownloadedFilePath = _downloads.GetDownloadPath(item.Definition);
 
                 item.IsBusy = true;
                 item.ShowProgress = true;
@@ -569,6 +615,8 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.ProgressOpacity));
                 item.Notify(nameof(item.Progress));
                 item.Notify(nameof(item.ProgressText));
+                item.Notify(nameof(item.DownloadedFilePath));
+                item.Notify(nameof(item.HasDownloadedFile));
                 item.Notify(nameof(item.CanPauseDownload));
                 item.Notify(nameof(item.CanResumeDownload));
                 item.Notify(nameof(item.CanPauseDownload));
@@ -630,6 +678,7 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.ShowProgress));
                 item.Notify(nameof(item.CanPauseDownload));
                 item.Notify(nameof(item.CanResumeDownload));
+                DeleteDownloadedFileNow(item);
                 InstallStatusText.Text = "Загрузка отменена: " + item.Definition.Name;
             }
             catch (Exception ex)

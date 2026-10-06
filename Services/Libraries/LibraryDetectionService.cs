@@ -67,11 +67,56 @@ namespace Nexora.Services.Libraries
         private static bool TryDetectVcppV14(string architecture, out string installedVersion)
         {
             installedVersion = null;
-            var wanted = architecture == "x86" ? "(x86)" : "(x64)";
 
-            foreach (var root in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            // Microsoft stores the v14 Runtime state in these registry keys.
+            // Prefer the exact runtime key because it distinguishes x86/x64/ARM64
+            // even when the uninstall display names are localized.
+            var keyPaths = new[]
             {
-                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, root))
+                @"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\" + architecture,
+                @"SOFTWARE\Wow6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\" + architecture
+            };
+
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
+                {
+                    foreach (var keyPath in keyPaths)
+                    {
+                        using (var key = baseKey.OpenSubKey(keyPath))
+                        {
+                            if (key == null)
+                                continue;
+
+                            var installed = Convert.ToInt32(key.GetValue("Installed", 0));
+                            if (installed != 1)
+                                continue;
+
+                            var major = Convert.ToInt32(key.GetValue("Major", 0));
+                            if (major < 14)
+                                continue;
+
+                            installedVersion = key.GetValue("Version") as string;
+                            if (string.IsNullOrWhiteSpace(installedVersion))
+                            {
+                                var minor = Convert.ToInt32(key.GetValue("Minor", 0));
+                                var build = Convert.ToInt32(key.GetValue("Bld", 0));
+                                var revision = Convert.ToInt32(key.GetValue("Rbld", 0));
+                                installedVersion = "14." + minor + "." + build + "." + revision;
+                            }
+
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Fallback for machines where the runtime key is missing but the
+            // package registered normally in Add/Remove Programs.
+            var wanted = architecture == "x86" ? "(x86)" : "(x64)";
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
                 using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
                 {
                     if (key == null) continue;
@@ -89,14 +134,11 @@ namespace Nexora.Services.Libraries
                                 continue;
 
                             var version = item.GetValue("DisplayVersion") as string;
-                            if (string.IsNullOrWhiteSpace(version))
-                                continue;
-
-                            if (!Version.TryParse(version, out var parsed) || parsed.Major < 14)
-                                continue;
-
-                            installedVersion = version;
-                            return true;
+                            if (!string.IsNullOrWhiteSpace(version) && Version.TryParse(version, out var parsed) && parsed.Major >= 14)
+                            {
+                                installedVersion = version;
+                                return true;
+                            }
                         }
                     }
                 }

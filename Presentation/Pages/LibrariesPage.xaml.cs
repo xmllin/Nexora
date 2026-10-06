@@ -32,6 +32,7 @@ namespace Nexora.Pages
         private Window _hostWindow;
         private readonly HashSet<Task> _activeDownloads = new HashSet<Task>();
         private bool _closingAfterDownloadCancellation;
+        private Task _activeInstallTask;
 
         public LibrariesPage()
         {
@@ -88,11 +89,16 @@ namespace Nexora.Pages
             if (_closingAfterDownloadCancellation)
                 return;
 
-            var active = _activeDownloads.Where(task => task != null && !task.IsCompleted).ToArray();
-            if (active.Length == 0)
+            var active = _activeDownloads.Where(task => task != null && !task.IsCompleted).ToList();
+            if (_activeInstallTask != null && !_activeInstallTask.IsCompleted)
+                active.Add(_activeInstallTask);
+
+            if (active.Count == 0)
                 return;
 
             e.Cancel = true;
+
+            try { _installCts?.Cancel(); } catch { }
 
             foreach (var item in _items.Where(item => item.IsBusy))
             {
@@ -460,7 +466,10 @@ namespace Nexora.Pages
                 return;
             }
             if (!AppDialog.ShowConfirm(Window.GetWindow(this), "Подтверждение", "Установить выбранные компоненты? Установщики будут запущены с правами администратора.")) return;
-            await InstallItemsAsync(selected);
+            var installTask = InstallItemsAsync(selected);
+            _activeInstallTask = installTask;
+            try { await installTask; }
+            finally { _activeInstallTask = null; }
         }
 
         private bool IsRecommendedForSystem(LibraryDefinition definition)

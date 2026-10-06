@@ -72,6 +72,7 @@
         <Style x:Key="LibraryMenuItem" TargetType="MenuItem">
             <Setter Property="Padding" Value="12,8"/>
             <Setter Property="Margin" Value="2"/>
+            <Setter Property="MinWidth" Value="242"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -125,7 +126,7 @@
                                 </Grid>
                             </Border>
                             <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}" PopupAnimation="Fade" StaysOpen="False">
-                                <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="260" Background="#0F2035" BorderBrush="#367FCE" BorderThickness="1" CornerRadius="8" Padding="2">
+                                <Border MinWidth="260" Width="Auto" HorizontalAlignment="Left" MaxHeight="260" Background="#0F2035" BorderBrush="#367FCE" BorderThickness="1" CornerRadius="8" Padding="2">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
                                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>

@@ -59,6 +59,7 @@ namespace Nexora.Pages
             if (initialInfo != null && _main.TryGetCachedDownloadInfo(initialInfo.Url, out var cachedInfo))
                 initialInfo = cachedInfo;
 
+            _resolvedInitialDownload = initialInfo;
             ApplyDownloadDetails(initialInfo);
             Loaded += AppDetailsPage_Loaded;
         }

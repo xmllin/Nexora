@@ -25,8 +25,6 @@ namespace Nexora
     {
         public static MainWindow Current { get; private set; }
         private bool _wallpaperFullscreen;
-        private bool _searchPlaceholderChanging;
-        private int _searchChangeVersion;
         private readonly System.Threading.Timer _clockTimer;
         private readonly Dictionary<string, UserControl> _pageCache = new Dictionary<string, UserControl>();
         private readonly Dictionary<string, IReadOnlyList<AppRelease>> _releaseCache = new Dictionary<string, IReadOnlyList<AppRelease>>(StringComparer.OrdinalIgnoreCase);

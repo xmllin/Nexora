@@ -86,6 +86,35 @@ namespace Nexora.Services.Libraries
             }
         }
 
+        public async Task UninstallWithInstallerAsync(LibraryDefinition definition, string installerPath, CancellationToken token)
+        {
+            if (definition == null || string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+                throw new FileNotFoundException("Файл установщика не найден.", installerPath);
+
+            var arguments = "/uninstall /quiet /norestart";
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = installerPath,
+                Arguments = arguments,
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = Path.GetDirectoryName(installerPath)
+                    ?? Environment.GetFolderPath(Environment.SpecialFolder.System)
+            };
+
+            using (var process = Process.Start(startInfo))
+            {
+                if (process == null) throw new InvalidOperationException("Не удалось запустить удаление через установщик.");
+                await process.WaitForExitAsync(token);
+
+                if (process.ExitCode == 1602 || process.ExitCode == 1223)
+                    throw new OperationCanceledException();
+
+                if (process.ExitCode != 0 && process.ExitCode != 3010)
+                    throw new InvalidOperationException("Удаление через установщик завершилось с кодом " + process.ExitCode + ".");
+            }
+        }
+
         public async Task InstallWindowsFeatureAsync(LibraryDefinition definition, CancellationToken token)
         {
             await RunPowerShellAsync("Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -NoRestart -ErrorAction Stop", token);

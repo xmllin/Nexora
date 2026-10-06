@@ -19,7 +19,15 @@ namespace Nexora.Services.Libraries
 
             try
             {
-                if (string.Equals(definition.InstallationType, "windowsFeature", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(definition.Id, "vcpp-2015-2026-x64", StringComparison.OrdinalIgnoreCase))
+                {
+                    installed = TryDetectVcppV14("x64", out installedVersion);
+                }
+                else if (string.Equals(definition.Id, "vcpp-2015-2026-x86", StringComparison.OrdinalIgnoreCase))
+                {
+                    installed = TryDetectVcppV14("x86", out installedVersion);
+                }
+                else if (string.Equals(definition.InstallationType, "windowsFeature", StringComparison.OrdinalIgnoreCase))
                 {
                     installed = IsNetFx3Enabled(out installedVersion);
                 }
@@ -52,10 +60,49 @@ namespace Nexora.Services.Libraries
 
             var status = installed
                 ? LibraryInstallStatus.Installed
-                : !definition.CanInstallAutomatically
-                    ? LibraryInstallStatus.Manual
-                    : LibraryInstallStatus.Missing;
+                : LibraryInstallStatus.Missing;
             return new LibraryItem(definition, status, installedVersion);
+        }
+
+        private static bool TryDetectVcppV14(string architecture, out string installedVersion)
+        {
+            installedVersion = null;
+            var wanted = architecture == "x86" ? "(x86)" : "(x64)";
+
+            foreach (var root in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, root))
+                using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
+                {
+                    if (key == null) continue;
+
+                    foreach (var subKeyName in key.GetSubKeyNames())
+                    {
+                        using (var item = key.OpenSubKey(subKeyName))
+                        {
+                            if (item == null) continue;
+                            var name = item.GetValue("DisplayName") as string;
+                            if (string.IsNullOrWhiteSpace(name) ||
+                                name.IndexOf("Microsoft Visual C++", StringComparison.OrdinalIgnoreCase) < 0 ||
+                                name.IndexOf("Redistributable", StringComparison.OrdinalIgnoreCase) < 0 ||
+                                name.IndexOf(wanted, StringComparison.OrdinalIgnoreCase) < 0)
+                                continue;
+
+                            var version = item.GetValue("DisplayVersion") as string;
+                            if (string.IsNullOrWhiteSpace(version))
+                                continue;
+
+                            if (!Version.TryParse(version, out var parsed) || parsed.Major < 14)
+                                continue;
+
+                            installedVersion = version;
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static bool IsNetFx3Enabled(out string installedVersion)

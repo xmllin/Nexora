@@ -102,7 +102,7 @@ namespace Nexora.Pages
         {
             CategoryComboBox.ItemsSource = new[] { "Все категории" }.Concat(_items.Select(x => x.Definition.Category).Distinct(StringComparer.OrdinalIgnoreCase)).ToList();
             CategoryComboBox.SelectedIndex = 0;
-            StatusComboBox.ItemsSource = new[] { "Все статусы", "Установлено", "Не установлено", "Доступно обновление", "Ручная установка", "Рекомендуемые" };
+            StatusComboBox.ItemsSource = new[] { "Все статусы", "Установлено", "Не установлено", "Доступно обновление", "Рекомендуемые" };
             StatusComboBox.SelectedIndex = 0;
         }
 
@@ -359,7 +359,9 @@ namespace Nexora.Pages
 
         private async void InstallSelected_Click(object sender, RoutedEventArgs e)
         {
-            var selected = _items.Where(x => x.IsSelected && x.Status != LibraryInstallStatus.Manual).ToList();
+            var selected = _items.Where(x => x.IsSelected &&
+                (x.IsWindowsFeature || x.Definition.CanInstallAutomatically) &&
+                x.Status != LibraryInstallStatus.Installed).ToList();
             if (selected.Count == 0)
             {
                 AppDialog.ShowInfo(Window.GetWindow(this), "Библиотеки", "Выберите устанавливаемые компоненты. Компоненты без автоматической установки отображаются как «Не установлено» и требуют установки вручную.");
@@ -371,12 +373,28 @@ namespace Nexora.Pages
 
         private bool IsRecommendedForSystem(LibraryDefinition definition)
         {
-            if (definition == null) return false;
+            if (definition == null ||
+                !string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
+                return false;
 
             var architecture = PlatformDetectionService.Current.Architecture ?? "x64";
-            var matchesArchitecture = definition.Architectures.Any(a => string.Equals(a, architecture, StringComparison.OrdinalIgnoreCase));
 
-            if (definition.Category == "Visual C++ Redistributable") return matchesArchitecture;
+            if (definition.RecommendationTags != null &&
+                definition.RecommendationTags.Contains("vcpp-v14-x64", StringComparer.OrdinalIgnoreCase))
+            {
+                var detected = _detection.Detect(definition);
+                return (architecture == "x64" || architecture == "arm64") && detected.Status != LibraryInstallStatus.Installed;
+            }
+
+            if (definition.RecommendationTags != null &&
+                definition.RecommendationTags.Contains("vcpp-v14-x86", StringComparer.OrdinalIgnoreCase))
+            {
+                var detected = _detection.Detect(definition);
+                return architecture == "x64" && detected.Status != LibraryInstallStatus.Installed;
+            }
+
+            // Legacy VC++ packages become recommended only when an explicit
+            // dependency detector marks the application as requiring them.
             return false;
         }
 
@@ -443,7 +461,7 @@ namespace Nexora.Pages
             }
             finally
             {
-                foreach (var item in items) { item.IsBusy = false; item.Refresh(); }
+                foreach (var item in items) { item.IsBusy = false; item.Notify(nameof(item.IsBusy)); item.Refresh(); }
                 _installCts.Dispose(); _installCts = null; UpdateSummary();
             }
         }
@@ -455,7 +473,8 @@ namespace Nexora.Pages
 
         private async Task DownloadLibraryAsync(LibraryItem item, bool installAfterDownload)
         {
-            if (item == null || item.Definition == null) return;
+            if (item == null || item.Definition == null || item.IsBusy)
+                return;
 
             if (string.IsNullOrWhiteSpace(item.Definition.DownloadUrl))
             {
@@ -478,6 +497,11 @@ namespace Nexora.Pages
                     item.Notify(nameof(item.ProgressText));
                 });
 
+                item.DownloadCancellation?.Dispose();
+                item.DownloadPauseController?.Dispose();
+                item.DownloadCancellation = new CancellationTokenSource();
+                item.DownloadPauseController = new PauseController();
+
                 item.IsBusy = true;
                 item.ShowProgress = true;
                 item.ProgressOpacity = 1;
@@ -490,7 +514,7 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.ProgressText));
                 InstallStatusText.Text = installAfterDownload ? "Скачивание и запуск установщика: " + item.Definition.Name : "Скачивание: " + item.Definition.Name;
 
-                var path = await _downloads.DownloadAsync(item.Definition, progress, CancellationToken.None);
+                var path = await _downloads.DownloadAsync(item.Definition, progress, item.DownloadCancellation.Token, item.DownloadPauseController);
                 item.DownloadedFilePath = path;
                 item.Progress = 100;
                 item.ProgressText = "Загружено: " + FormatBytes(new FileInfo(path).Length);
@@ -504,7 +528,7 @@ namespace Nexora.Pages
 
                 if (installAfterDownload)
                 {
-                    await _installation.InstallAsync(item.Definition, path, CancellationToken.None);
+                    await _installation.InstallAsync(item.Definition, path, item.DownloadCancellation.Token);
                     var detected = _detection.Detect(item.Definition);
                     item.Status = detected.Status;
                     item.InstalledVersion = detected.InstalledVersion;
@@ -534,6 +558,16 @@ namespace Nexora.Pages
                 }
                 await HideProgressAfterDelayAsync(item);
             }
+            catch (OperationCanceledException)
+            {
+                item.IsBusy = false;
+                item.ProgressText = "Загрузка отменена";
+                item.ShowProgress = false;
+                item.Notify(nameof(item.IsBusy));
+                item.Notify(nameof(item.ProgressText));
+                item.Notify(nameof(item.ShowProgress));
+                InstallStatusText.Text = "Загрузка отменена: " + item.Definition.Name;
+            }
             catch (Exception ex)
             {
                 item.IsBusy = false;
@@ -543,6 +577,37 @@ namespace Nexora.Pages
                 InstallStatusText.Text = "Ошибка загрузки: " + ex.Message;
                 AppDialog.ShowInfo(Window.GetWindow(this), item.Definition.Name, ex.Message);
             }
+        }
+
+        private void PauseLibraryDownload_Click(object sender, RoutedEventArgs e)
+        {
+            var item = (sender as Button)?.Tag as LibraryItem;
+            if (item?.DownloadPauseController == null || !item.IsBusy)
+                return;
+
+            item.DownloadPauseController.Pause();
+            item.Refresh();
+        }
+
+        private void ResumeLibraryDownload_Click(object sender, RoutedEventArgs e)
+        {
+            var item = (sender as Button)?.Tag as LibraryItem;
+            if (item?.DownloadPauseController == null || !item.IsBusy)
+                return;
+
+            item.DownloadPauseController.Resume();
+            item.Refresh();
+        }
+
+        private void CancelLibraryDownload_Click(object sender, RoutedEventArgs e)
+        {
+            var item = (sender as Button)?.Tag as LibraryItem;
+            if (item?.DownloadCancellation == null)
+                return;
+
+            item.DownloadCancellation.Cancel();
+            if (item.DownloadPauseController != null)
+                item.DownloadPauseController.Resume();
         }
 
         private async Task InstallWindowsFeatureAsync(LibraryItem item)

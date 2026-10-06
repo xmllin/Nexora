@@ -206,80 +206,80 @@ namespace Nexora.Services.Libraries
             var categoryLiteral = EscapePowerShellSingleQuoted(category ?? string.Empty);
 
             const string template = """
-$ErrorActionPreference = 'Stop'
-$names = @({{NAMES}})
-$category = '{{CATEGORY}}'
-$roots = @(
-    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-)
+            $ErrorActionPreference = 'Stop'
+            $names = @({{NAMES}})
+            $category = '{{CATEGORY}}'
+            $roots = @(
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
 
-$target = $null
-foreach ($root in $roots) {
-    try {
-        $items = @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)
-        foreach ($item in $items) {
-            $displayName = [string]$item.DisplayName
-            if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
+            $target = $null
+            foreach ($root in $roots) {
+                try {
+                    $items = @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)
+                    foreach ($item in $items) {
+                        $displayName = [string]$item.DisplayName
+                        if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
 
-            if ($category -eq 'Visual C++ Redistributable' -and
-                $displayName.IndexOf('Redistributable', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-                continue
+                        if ($category -eq 'Visual C++ Redistributable' -and
+                            $displayName.IndexOf('Redistributable', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                            continue
+                        }
+
+                        $matched = $false
+                        foreach ($candidate in $names) {
+                            if ($displayName.IndexOf($candidate, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                                $matched = $true
+                                break
+                            }
+                        }
+
+                        if ($matched) {
+                            $target = $item
+                            break
+                        }
+                    }
+                } catch {}
+
+                if ($null -ne $target) { break }
             }
 
-            $matched = $false
-            foreach ($candidate in $names) {
-                if ($displayName.IndexOf($candidate, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                    $matched = $true
-                    break
-                }
+            if ($null -eq $target) {
+                throw 'В реестре Windows не найден компонент для удаления.'
             }
 
-            if ($matched) {
-                $target = $item
-                break
+            $command = [string]$target.QuietUninstallString
+            if ([string]::IsNullOrWhiteSpace($command)) {
+                $command = [string]$target.UninstallString
             }
-        }
-    } catch {}
+            if ([string]::IsNullOrWhiteSpace($command)) {
+                throw 'Для компонента не найдена команда удаления.'
+            }
 
-    if ($null -ne $target) { break }
-}
+            $guidMatch = [regex]::Match($command, '(?i)\{[0-9a-f-]{36}\}')
+            if ($guidMatch.Success -and $command -match '(?i)(^|[\s\\/])msiexec(?:\.exe)?([\s]|$)') {
+                $p = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList @('/x', $guidMatch.Value, '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
+                exit $p.ExitCode
+            }
 
-if ($null -eq $target) {
-    throw 'В реестре Windows не найден компонент для удаления.'
-}
+            if ($command -match '^\s*"([^"]+)"\s*(.*)$') {
+                $file = $Matches[1]
+                $args = $Matches[2]
+            }
+            else {
+                $parts = $command.Trim() -split '\s+', 2
+                $file = $parts[0]
+                $args = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+            }
 
-$command = [string]$target.QuietUninstallString
-if ([string]::IsNullOrWhiteSpace($command)) {
-    $command = [string]$target.UninstallString
-}
-if ([string]::IsNullOrWhiteSpace($command)) {
-    throw 'Для компонента не найдена команда удаления.'
-}
+            $file = [Environment]::ExpandEnvironmentVariables($file)
+            if (-not (Test-Path -LiteralPath $file)) {
+                throw "Файл удаления не найден: $file"
+            }
 
-$guidMatch = [regex]::Match($command, '(?i)\{[0-9a-f-]{36}\}')
-if ($guidMatch.Success -and $command -match '(?i)(^|[\s\\/])msiexec(?:\.exe)?([\s]|$)') {
-    $p = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList @('/x', $guidMatch.Value, '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
-    exit $p.ExitCode
-}
-
-if ($command -match '^\s*"([^"]+)"\s*(.*)$') {
-    $file = $Matches[1]
-    $args = $Matches[2]
-}
-else {
-    $parts = $command.Trim() -split '\s+', 2
-    $file = $parts[0]
-    $args = if ($parts.Count -gt 1) { $parts[1] } else { '' }
-}
-
-$file = [Environment]::ExpandEnvironmentVariables($file)
-if (-not (Test-Path -LiteralPath $file)) {
-    throw "Файл удаления не найден: $file"
-}
-
-$p = Start-Process -FilePath $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
-exit $p.ExitCode
+            $p = Start-Process -FilePath $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+            exit $p.ExitCode
             """;
 
             return template

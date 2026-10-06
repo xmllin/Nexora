@@ -27,6 +27,7 @@ namespace Nexora.Pages
         private DownloadInfo _displayedInfo;
         private DownloadInfo _resolvedInitialDownload;
         private string _latestVersion = string.Empty;
+        private string _appNameFallback => string.IsNullOrWhiteSpace(_app?.Name) ? "Приложение" : _app.Name;
 
         public AppDetailsPage(MainWindow main, AppDefinition app)
         {
@@ -179,6 +180,52 @@ namespace Nexora.Pages
             DownloadStatusText.Text = _releases.Count == 0
                 ? "Стабильные версии не найдены."
                 : string.Empty;
+
+            if (_releases.Count > 0)
+                _ = WarmReleaseMetadataAsync(_releases, selectedIndex);
+        }
+
+        private async Task WarmReleaseMetadataAsync(IReadOnlyList<AppRelease> releases, int selectedIndex)
+        {
+            var targets = new List<AppRelease>();
+            if (releases != null)
+            {
+                if (selectedIndex >= 0 && selectedIndex < releases.Count)
+                    targets.Add(releases[selectedIndex]);
+
+                foreach (var release in releases.Take(12))
+                {
+                    if (!targets.Contains(release))
+                        targets.Add(release);
+                }
+            }
+
+            var tasks = targets.Select(async release =>
+            {
+                if (release?.Download == null || release.Download.SizeBytes.HasValue)
+                    return;
+
+                if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        await LoadWinGetDownloadMetadataAsync(release.Download).ConfigureAwait(true);
+                    }
+                    catch { }
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(release.Download.Url) &&
+                    Uri.TryCreate(release.Download.Url, UriKind.Absolute, out var uri) &&
+                    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                {
+                    try { await LoadDownloadSizeAsync(release.Download).ConfigureAwait(true); }
+                    catch { }
+                }
+            });
+
+            try { await Task.WhenAll(tasks).ConfigureAwait(true); }
+            catch { }
         }
 
         private async Task<AppRelease> ResolveSingleReleaseAsync(CancellationToken token)
@@ -201,13 +248,14 @@ namespace Nexora.Pages
 
             return new AppRelease
             {
-                Version = string.IsNullOrWhiteSpace(info.Version) ? "Последняя" : info.Version,
+                Version = info.Version ?? string.Empty,
                 Title = _app.Name,
+                DisplayVersion = string.IsNullOrWhiteSpace(info.Version) ? _app.Name : info.Version,
                 Download = info
             };
         }
 
-        private static List<AppRelease> PrepareReleaseItems(IEnumerable<AppRelease> releases)
+        private List<AppRelease> PrepareReleaseItems(IEnumerable<AppRelease> releases)
         {
             var unique = (releases ?? Enumerable.Empty<AppRelease>())
                 .Where(item => item != null && item.Download != null)
@@ -226,7 +274,9 @@ namespace Nexora.Pages
 
                 foreach (var item in group)
                 {
-                    var version = string.IsNullOrWhiteSpace(item.Version) ? "Последняя" : item.Version;
+                    var version = string.IsNullOrWhiteSpace(item.Version)
+                        ? (string.IsNullOrWhiteSpace(item.Title) ? _appNameFallback : item.Title)
+                        : item.Version;
                     var displayVersion = string.IsNullOrWhiteSpace(item.DisplayVersion) ? version : item.DisplayVersion;
                     if (!string.IsNullOrWhiteSpace(item.Download.Format))
                     {
@@ -262,7 +312,7 @@ namespace Nexora.Pages
                 _main.CacheAppDownloadInfo(_app, info);
 
             ReleaseFormatText.Text = info.Format;
-            ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "Определяется…";
+            ReleaseSizeText.Text = info.SizeBytes.HasValue ? FormatSize(info.SizeBytes.Value) : "—";
             if (!HasRealExtension(info.FileName) && !string.IsNullOrWhiteSpace(info.Url))
                 _ = LoadDownloadFileNameAsync(info);
 
@@ -275,31 +325,6 @@ namespace Nexora.Pages
                          Uri.TryCreate(info.Url, UriKind.Absolute, out var infoUri) &&
                          (infoUri.Scheme == Uri.UriSchemeHttp || infoUri.Scheme == Uri.UriSchemeHttps))
                     _ = LoadDownloadSizeAsync(info);
-            }
-        }
-
-        private async Task ResolveAndApplyVersionAsync(DownloadInfo info, CancellationToken token)
-        {
-            try
-            {
-                var version = await _versionResolver.ResolveAsync(_app, info, token);
-                if (!string.IsNullOrWhiteSpace(version))
-                {
-                    info.Version = version;
-                    _latestVersion = version;
-                    _main.CacheDownloadInfo(info);
-                    _main.CacheAppDownloadInfo(_app, info);
-                    if (ReferenceEquals(_displayedInfo, info) || ReferenceEquals(_resolvedInitialDownload, info))
-                        ReleaseVersionText.Text = version;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                // Version lookup is best-effort; the official download remains usable.
             }
         }
 
@@ -384,7 +409,9 @@ namespace Nexora.Pages
                     : release.DisplayVersion;
             }
 
-            return string.IsNullOrWhiteSpace(release.Version) ? "Не определена" : release.Version;
+            return string.IsNullOrWhiteSpace(release.Version)
+                ? (string.IsNullOrWhiteSpace(release.Title) ? "Приложение" : release.Title)
+                : release.Version;
         }
 
         private static bool HasRealExtension(string value)

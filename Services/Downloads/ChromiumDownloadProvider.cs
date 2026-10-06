@@ -67,8 +67,10 @@ namespace Nexora.Services.Downloads
                 .GroupBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
                 .OrderByDescending(x => x.Number)
+                .Select(x => new { Snapshot = x, Version = ResolveChromiumVersion(x.Number, releaseMap) })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Version))
                 .Take(30)
-                .Select(x => CreateRelease(x.Value, storagePlatform, ResolveChromiumVersion(x.Number, releaseMap)))
+                .Select(x => CreateRelease(x.Snapshot.Value, storagePlatform, x.Version))
                 .ToList();
         }
 
@@ -223,9 +225,7 @@ namespace Nexora.Services.Downloads
             var url = "https://commondatastorage.googleapis.com/chromium-browser-snapshots/" + storagePlatform + "/" + revision + "/" + archive;
             var fileName = "chromium-win-" + suffix + "-" + revision + ".zip";
 
-            var displayVersion = string.IsNullOrWhiteSpace(semanticVersion)
-                ? "Revision " + revision
-                : semanticVersion + " - rev " + revision;
+            var displayVersion = semanticVersion;
 
             return new AppRelease
             {
@@ -256,9 +256,11 @@ namespace Nexora.Services.Downloads
 
             var endpoints = new[]
             {
-                "https://chromiumdash.appspot.com/fetch_releases?channel=Canary&platform=Windows&num=200",
-                "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Windows&num=200"
+                "https://chromiumdash.appspot.com/fetch_releases?channel=Canary&platform=Windows&num=1000",
+                "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Windows&num=1000"
             };
+
+            var combined = new List<ChromiumReleaseMarker>();
 
             foreach (var endpoint in endpoints)
             {
@@ -278,7 +280,6 @@ namespace Nexora.Services.Downloads
                             if (items.ValueKind != JsonValueKind.Array)
                                 continue;
 
-                            var map = new List<ChromiumReleaseMarker>();
                             foreach (var item in items.EnumerateArray())
                             {
                                 if (item.ValueKind != JsonValueKind.Object ||
@@ -293,24 +294,11 @@ namespace Nexora.Services.Downloads
                                 if (position <= 0)
                                     continue;
 
-                                map.Add(new ChromiumReleaseMarker
+                                combined.Add(new ChromiumReleaseMarker
                                 {
                                     Version = version,
                                     Position = position
                                 });
-                            }
-
-                            if (map.Count > 0)
-                            {
-                                map = map
-                                    .OrderBy(x => x.Position)
-                                    .ToList();
-                                lock (ChromiumReleaseMapLock)
-                                {
-                                    ChromiumReleaseMap = map;
-                                    ChromiumReleaseMapUpdatedUtc = DateTime.UtcNow;
-                                }
-                                return map;
                             }
                         }
                     }
@@ -319,7 +307,24 @@ namespace Nexora.Services.Downloads
                 catch { }
             }
 
-            return new List<ChromiumReleaseMarker>();
+            if (combined.Count == 0)
+                return new List<ChromiumReleaseMarker>();
+
+            var map = combined
+                .GroupBy(x => x.Position)
+                .Select(group => group
+                    .OrderByDescending(x => VersionInfo.Parse(x.Version))
+                    .First())
+                .OrderBy(x => x.Position)
+                .ToList();
+
+            lock (ChromiumReleaseMapLock)
+            {
+                ChromiumReleaseMap = map;
+                ChromiumReleaseMapUpdatedUtc = DateTime.UtcNow;
+            }
+
+            return map;
         }
 
         private static long ReadChromiumPosition(JsonElement item)

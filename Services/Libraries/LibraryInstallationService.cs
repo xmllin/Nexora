@@ -280,7 +280,7 @@ if (-not (Test-Path -LiteralPath $file)) {
 
 $p = Start-Process -FilePath $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
 exit $p.ExitCode
-""";
+            """;
 
             return template
                 .Replace("{{NAMES}}", nameLiterals)

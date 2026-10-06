@@ -97,6 +97,16 @@ namespace Nexora.Services
             if (e.ChangedButton != MouseButton.Left || e.ButtonState != MouseButtonState.Pressed)
                 return;
 
+            var source = e.OriginalSource as DependencyObject;
+            while (source != null)
+            {
+                if (source is Button)
+                    return;
+                source = source is Visual
+                    ? VisualTreeHelper.GetParent(source)
+                    : (source as FrameworkContentElement)?.Parent;
+            }
+
             try
             {
                 DragHeader.Cursor = Cursors.Hand;

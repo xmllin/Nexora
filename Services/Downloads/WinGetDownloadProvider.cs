@@ -307,8 +307,7 @@ namespace Nexora.Services.Downloads
                     "--accept-source-agreements",
                     "--accept-package-agreements",
                     "--skip-license",
-                    "--disable-interactivity",
-                    "--locale", "en-US"
+                    "--disable-interactivity"
                 };
 
                 var source = string.IsNullOrWhiteSpace(info.PackageSource)

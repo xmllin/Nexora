@@ -1,12 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices;
-using Microsoft.Win32;
 using Nexora.Models;
 
 namespace Nexora.Services.Libraries
@@ -195,440 +192,145 @@ namespace Nexora.Services.Libraries
 
         public async Task UninstallAsync(LibraryDefinition definition, CancellationToken token)
         {
-            if (definition == null) throw new InvalidOperationException("Компонент не указан.");
+            if (definition == null)
+                throw new InvalidOperationException("Компонент не указан.");
 
-            var uninstallCommand = FindUninstallCommand(definition);
-            if (string.IsNullOrWhiteSpace(uninstallCommand))
-            {
-                // Some Visual C++ entries keep an UninstallString that points to
-                // a removed Package Cache executable. In that case the original
-                // installer is not required: download the official package again
-                // and use its documented /uninstall mode.
-                if (string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
-                    throw new FileNotFoundException("Не найден рабочий установщик для удаления компонента.");
-                throw new InvalidOperationException("Для этого компонента не найдено корректного удаления из системы.");
-            }
+            var names = BuildDisplayNameCandidates(definition);
+            if (names.Length == 0)
+                throw new InvalidOperationException("Не удалось определить название компонента для удаления.");
 
-            var startInfo = CreateUninstallStartInfo(uninstallCommand);
-            var executableName = Path.GetFileName(startInfo.FileName);
-            if (!string.Equals(executableName, "msiexec.exe", StringComparison.OrdinalIgnoreCase))
+            var script = BuildHiddenUninstallScript(names, definition.Category);
+            var exitCode = await RunHiddenPowerShellAsync(script, token);
+
+            if (exitCode == 1602 || exitCode == 1223)
+                throw new OperationCanceledException();
+
+            if (exitCode == 3010)
+                return;
+
+            if (exitCode != 0)
+                throw new InvalidOperationException("Удаление завершилось с кодом " + exitCode + ".");
+        }
+
+        private static async Task<int> RunHiddenPowerShellAsync(string script, CancellationToken token)
+        {
+            var systemFolder = Environment.GetFolderPath(Environment.SpecialFolder.System);
+            var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+
+            var startInfo = new ProcessStartInfo
             {
-                var executablePath = Environment.ExpandEnvironmentVariables(startInfo.FileName.Trim().Trim('"'));
-                if (!File.Exists(executablePath))
-                    throw new FileNotFoundException("Файл установщика для удаления не найден.", executablePath);
-            }
+                FileName = Path.Combine(systemFolder, "WindowsPowerShell\\v1.0\\powershell.exe"),
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " + encodedCommand,
+                UseShellExecute = true,
+                Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = systemFolder
+            };
 
             using (var process = Process.Start(startInfo))
             {
-                if (process == null) throw new InvalidOperationException("Не удалось запустить удаление компонента.");
-                _ = AutomateMaintenanceWindowAsync(process, MaintenanceAction.Uninstall, token);
+                if (process == null)
+                    throw new InvalidOperationException("Не удалось запустить PowerShell для удаления компонента.");
+
                 await process.WaitForExitAsync(token);
-                if (process.ExitCode == 1602) throw new OperationCanceledException();
-                if (process.ExitCode != 0) throw new InvalidOperationException("Удаление завершилось с кодом " + process.ExitCode + ".");
+                return process.ExitCode;
             }
         }
 
-        public bool HasRepairCommand(LibraryDefinition definition)
+        private static string BuildHiddenUninstallScript(string[] names, string category)
         {
-            if (definition == null)
-                return false;
+            var nameLiterals = string.Join(", ",
+                names.Select(name => "'" + EscapePowerShellSingleQuoted(name) + "'"));
+            var categoryLiteral = EscapePowerShellSingleQuoted(category ?? string.Empty);
 
-            var command = FindRepairCommand(definition);
-            if (string.IsNullOrWhiteSpace(command))
-                return false;
+            const string template = @"
+$ErrorActionPreference = 'Stop'
+$names = @(%%NAMES%%)
+$category = '%%CATEGORY%%'
+$roots = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+)
 
-            try
-            {
-                SplitExecutableAndArguments(command, out var fileName, out _);
-                if (string.IsNullOrWhiteSpace(fileName))
-                    return false;
-
-                fileName = fileName.Trim().Trim('"');
-                return File.Exists(Environment.ExpandEnvironmentVariables(fileName)) ||
-                       string.Equals(Path.GetFileName(fileName), "msiexec.exe", StringComparison.OrdinalIgnoreCase);
+$target = $null
+foreach ($root in $roots) {
+    try {
+        $items = @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)
+        foreach ($item in $items) {
+            $displayName = [string]$item.DisplayName
+            if ([string]::IsNullOrWhiteSpace($displayName)) {
+                continue
             }
-            catch
-            {
-                return false;
+
+            if ($category -eq 'Visual C++ Redistributable' -and
+                $displayName.IndexOf('Redistributable', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                continue
             }
-        }
 
-        public async Task RepairAsync(LibraryDefinition definition, CancellationToken token)
-        {
-            if (definition == null) throw new InvalidOperationException("Компонент не указан.");
-
-            var repairCommand = FindRepairCommand(definition);
-            if (string.IsNullOrWhiteSpace(repairCommand))
-                throw new InvalidOperationException("Для этого компонента не найдена программа восстановления.");
-
-            using (var process = Process.Start(CreateUninstallStartInfo(repairCommand)))
-            {
-                if (process == null) throw new InvalidOperationException("Не удалось запустить восстановление компонента.");
-                _ = AutomateMaintenanceWindowAsync(process, MaintenanceAction.Repair, token);
-                await process.WaitForExitAsync(token);
-                if (process.ExitCode == 1602) throw new OperationCanceledException();
-                if (process.ExitCode != 0) throw new InvalidOperationException("Восстановление завершилось с кодом " + process.ExitCode + ".");
-            }
-        }
-
-        private enum MaintenanceAction
-        {
-            Uninstall,
-            Repair
-        }
-
-        private static async Task AutomateMaintenanceWindowAsync(Process process, MaintenanceAction action, CancellationToken token)
-        {
-            for (var attempt = 0; attempt < 120 && !process.HasExited; attempt++)
-            {
-                token.ThrowIfCancellationRequested();
-                foreach (var window in GetProcessWindows(process.Id))
-                {
-                    if (action == MaintenanceAction.Uninstall)
-                    {
-                        if (TryClickButton(window, "Uninstall") || TryClickButton(window, "Удалить") ||
-                            TryClickButton(window, "Remove") || TryClickButton(window, "Удаление"))
-                            return;
-                    }
-                    else
-                    {
-                        if (TryClickButton(window, "Repair") || TryClickButton(window, "Восстановить"))
-                        {
-                            await Task.Delay(180, token);
-                            TryClickButton(window, "Next");
-                            TryClickButton(window, "Далее");
-                            TryClickButton(window, "Repair");
-                            TryClickButton(window, "Восстановить");
-                            return;
-                        }
-
-                        if (TryClickControl(window, "Repair") || TryClickControl(window, "Восстановить"))
-                        {
-                            await Task.Delay(180, token);
-                            TryClickButton(window, "Next");
-                            TryClickButton(window, "Далее");
-                            TryClickButton(window, "Repair");
-                            TryClickButton(window, "Восстановить");
-                            return;
-                        }
-                    }
-                }
-
-                await Task.Delay(250, token);
-            }
-        }
-
-        private static IEnumerable<IntPtr> GetProcessWindows(int processId)
-        {
-            var windows = new List<IntPtr>();
-            EnumWindows((window, _) =>
-            {
-                GetWindowThreadProcessId(window, out var pid);
-                if ((int)pid == processId && IsWindowVisible(window))
-                    windows.Add(window);
-                return true;
-            }, IntPtr.Zero);
-            return windows;
-        }
-
-        private static bool TryClickButton(IntPtr root, string text)
-        {
-            var control = FindChildByText(root, text, "Button");
-            if (control == IntPtr.Zero) return false;
-            SendMessage(control, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-            return true;
-        }
-
-        private static bool TryClickControl(IntPtr root, string text)
-        {
-            var control = FindChildByText(root, text, null);
-            return control != IntPtr.Zero && SendMessage(control, BM_CLICK, IntPtr.Zero, IntPtr.Zero) != IntPtr.Zero;
-        }
-
-        private static IntPtr FindChildByText(IntPtr root, string text, string className)
-        {
-            IntPtr result = IntPtr.Zero;
-            EnumChildWindows(root, (window, _) =>
-            {
-                var value = GetWindowText(window);
-                var classValue = GetClassName(window);
-                if (!string.IsNullOrWhiteSpace(value) &&
-                    string.Equals(value.Trim(), text, StringComparison.OrdinalIgnoreCase) &&
-                    (className == null || string.Equals(classValue, className, StringComparison.OrdinalIgnoreCase)))
-                {
-                    result = window;
-                    return false;
-                }
-                return true;
-            }, IntPtr.Zero);
-            return result;
-        }
-
-        private static string GetWindowText(IntPtr window)
-        {
-            var length = GetWindowTextLength(window);
-            if (length <= 0) return string.Empty;
-            var buffer = new System.Text.StringBuilder(length + 1);
-            GetWindowText(window, buffer, buffer.Capacity);
-            return buffer.ToString();
-        }
-
-        private static string GetClassName(IntPtr window)
-        {
-            var buffer = new System.Text.StringBuilder(128);
-            GetClassName(window, buffer, buffer.Capacity);
-            return buffer.ToString();
-        }
-
-        private const uint BM_CLICK = 0x00F5;
-
-        private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
-
-        [DllImport("user32.dll")]
-        private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr parameter);
-
-        [DllImport("user32.dll")]
-        private static extern bool IsWindowVisible(IntPtr window);
-
-        [DllImport("user32.dll")]
-        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int maxCount);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetWindowTextLength(IntPtr window);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetClassName(IntPtr window, System.Text.StringBuilder className, int maxCount);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
-
-        public string FindInstallLocation(LibraryDefinition definition)
-        {
-            if (definition == null) return string.Empty;
-            var names = BuildDisplayNameCandidates(definition);
-
-            foreach (var root in new[] { RegistryView.Registry64, RegistryView.Registry32 })
-            {
-                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, root))
-                using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
-                {
-                    if (key == null) continue;
-                    foreach (var subKeyName in key.GetSubKeyNames())
-                    {
-                        using (var item = key.OpenSubKey(subKeyName))
-                        {
-                            var displayName = item?.GetValue("DisplayName") as string;
-                            if (string.IsNullOrWhiteSpace(displayName) || !names.Any(name => displayName.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
-                            var location = item.GetValue("InstallLocation") as string;
-                            if (!string.IsNullOrWhiteSpace(location))
-                            {
-                                location = Environment.ExpandEnvironmentVariables(location.Trim().Trim('"'));
-                                if (Directory.Exists(location)) return location;
-                            }
-
-                            var displayIcon = item.GetValue("DisplayIcon") as string;
-                            var iconPath = ExtractExecutablePath(displayIcon);
-                            if (!string.IsNullOrWhiteSpace(iconPath) && File.Exists(iconPath))
-                                return Path.GetDirectoryName(iconPath);
-                        }
-                    }
+            $matched = $false
+            foreach ($candidate in $names) {
+                if ($displayName.IndexOf($candidate, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                    $matched = $true
+                    break
                 }
             }
 
-            return string.Empty;
-        }
-
-        private static ProcessStartInfo CreateUninstallStartInfo(string uninstallCommand)
-        {
-            var command = uninstallCommand.Trim();
-            string fileName;
-            string arguments;
-
-            if (command.StartsWith("\"", StringComparison.Ordinal))
-            {
-                var closingQuote = command.IndexOf('"', 1);
-                if (closingQuote < 0) throw new InvalidOperationException("Некорректная команда удаления компонента.");
-                fileName = command.Substring(1, closingQuote - 1);
-                arguments = command.Substring(closingQuote + 1).Trim();
-            }
-            else
-            {
-                SplitExecutableAndArguments(command, out fileName, out arguments);
-            }
-
-            if (Path.GetFileNameWithoutExtension(fileName).Equals("msiexec", StringComparison.OrdinalIgnoreCase))
-                arguments = NormalizeMsiUninstallArguments(arguments);
-
-            return new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
-                UseShellExecute = true,
-                Verb = "runas",
-                WorkingDirectory = Path.GetDirectoryName(fileName) ?? Environment.GetFolderPath(Environment.SpecialFolder.System)
-            };
-        }
-
-        private static void SplitExecutableAndArguments(string command, out string fileName, out string arguments)
-        {
-            fileName = command.Trim();
-            arguments = string.Empty;
-
-            foreach (var extension in new[] { ".exe", ".com", ".bat", ".cmd" })
-            {
-                var searchStart = 0;
-                while (searchStart < command.Length)
-                {
-                    var index = command.IndexOf(extension, searchStart, StringComparison.OrdinalIgnoreCase);
-                    if (index < 0) break;
-
-                    var end = index + extension.Length;
-                    if (end == command.Length || char.IsWhiteSpace(command[end]))
-                    {
-                        fileName = command.Substring(0, end).Trim().Trim('"');
-                        arguments = end < command.Length ? command.Substring(end).Trim() : string.Empty;
-                        return;
-                    }
-
-                    searchStart = end;
-                }
-            }
-
-            var separator = command.IndexOf(' ');
-            if (separator >= 0)
-            {
-                fileName = command.Substring(0, separator);
-                arguments = command.Substring(separator + 1).Trim();
+            if ($matched) {
+                $target = $item
+                break
             }
         }
+    } catch {}
 
-        private static string NormalizeMsiUninstallArguments(string arguments)
-        {
-            if (string.IsNullOrWhiteSpace(arguments)) return arguments;
-            var normalized = arguments.Trim();
-            if (normalized.StartsWith("/I", StringComparison.OrdinalIgnoreCase))
-                return "/X" + normalized.Substring(2);
-            if (normalized.StartsWith("/package", StringComparison.OrdinalIgnoreCase))
-                return "/X" + normalized.Substring("/package".Length);
-            return normalized;
+    if ($null -ne $target) {
+        break
+    }
+}
+
+if ($null -eq $target) {
+    throw 'В реестре Windows не найден компонент для удаления.'
+}
+
+$command = [string]$target.QuietUninstallString
+if ([string]::IsNullOrWhiteSpace($command)) {
+    $command = [string]$target.UninstallString
+}
+if ([string]::IsNullOrWhiteSpace($command)) {
+    throw 'Для компонента не найдена команда удаления.'
+}
+
+$guidMatch = [regex]::Match($command, '(?i)\{[0-9a-f-]{36}\}')
+if ($guidMatch.Success -and $command -match '(?i)(^|[\s\\/])msiexec(?:\.exe)?([\s]|$)') {
+    $p = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList @('/x', $guidMatch.Value, '/qn', '/norestart') -Wait -PassThru -WindowStyle Hidden
+    exit $p.ExitCode
+}
+
+if ($command -match '^\s*"([^"]+)"\s*(.*)$') {
+    $file = $Matches[1]
+    $args = $Matches[2]
+} else {
+    $parts = $command.Trim() -split '\s+', 2
+    $file = $parts[0]
+    $args = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+}
+
+$file = [Environment]::ExpandEnvironmentVariables($file)
+if (-not (Test-Path -LiteralPath $file)) {
+    throw "Файл удаления не найден: $file"
+}
+
+$p = Start-Process -FilePath $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+exit $p.ExitCode
+";
+
+            return template
+                .Replace("%%NAMES%%", nameLiterals)
+                .Replace("%%CATEGORY%%", categoryLiteral);
         }
 
-        private static string NormalizeRepairCommand(string command)
+        private static string EscapePowerShellSingleQuoted(string value)
         {
-            var normalized = command.Trim();
-            string fileName;
-            string arguments;
-            if (normalized.StartsWith("\"", StringComparison.Ordinal))
-            {
-                var closingQuote = normalized.IndexOf('"', 1);
-                if (closingQuote < 0) return normalized;
-                fileName = normalized.Substring(1, closingQuote - 1);
-                arguments = normalized.Substring(closingQuote + 1).Trim();
-            }
-            else
-            {
-                SplitExecutableAndArguments(normalized, out fileName, out arguments);
-            }
-
-            if (Path.GetFileNameWithoutExtension(fileName).Equals("msiexec", StringComparison.OrdinalIgnoreCase))
-            {
-                var brace = arguments.IndexOf('{');
-                var productCode = brace >= 0 ? arguments.Substring(brace) : arguments;
-                return fileName + " /fa " + productCode;
-            }
-
-            if (arguments.IndexOf("/repair", StringComparison.OrdinalIgnoreCase) >= 0)
-                return normalized;
-            if (arguments.IndexOf("/modify", StringComparison.OrdinalIgnoreCase) >= 0)
-                arguments = System.Text.RegularExpressions.Regex.Replace(arguments, "/modify", "/repair", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            else if (arguments.IndexOf("/uninstall", StringComparison.OrdinalIgnoreCase) >= 0)
-                arguments = System.Text.RegularExpressions.Regex.Replace(arguments, "/uninstall", "/repair", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            else
-                arguments = (arguments + " /repair").Trim();
-
-            return "\"" + fileName + "\" " + arguments;
-        }
-
-        private static string ExtractExecutablePath(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-            var path = value.Trim().Trim('"');
-            var comma = path.LastIndexOf(',');
-            if (comma > 0) path = path.Substring(0, comma).Trim().Trim('"');
-            return Environment.ExpandEnvironmentVariables(path);
-        }
-
-        private static string FindUninstallCommand(LibraryDefinition definition)
-        {
-            var names = BuildDisplayNameCandidates(definition);
-
-            foreach (var root in new[] { RegistryView.Registry64, RegistryView.Registry32 })
-            {
-                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, root))
-                using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
-                {
-                    if (key == null) continue;
-                    foreach (var subKeyName in key.GetSubKeyNames())
-                    {
-                        using (var item = key.OpenSubKey(subKeyName))
-                        {
-                            if (item == null) continue;
-                            var displayName = item.GetValue("DisplayName") as string;
-                            var uninstallString = item.GetValue("UninstallString") as string;
-                            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(uninstallString)) continue;
-                            if (string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase) &&
-                                displayName.IndexOf("Redistributable", StringComparison.OrdinalIgnoreCase) < 0)
-                                continue;
-                            if (names.Any(name => displayName.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0))
-                                return uninstallString;
-                        }
-                    }
-                }
-            }
-
-            return string.Empty;
-        }
-
-        private static string FindRepairCommand(LibraryDefinition definition)
-        {
-            var names = BuildDisplayNameCandidates(definition);
-
-            foreach (var root in new[] { RegistryView.Registry64, RegistryView.Registry32 })
-            {
-                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, root))
-                using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
-                {
-                    if (key == null) continue;
-                    foreach (var subKeyName in key.GetSubKeyNames())
-                    {
-                        using (var item = key.OpenSubKey(subKeyName))
-                        {
-                            if (item == null) continue;
-                            var displayName = item.GetValue("DisplayName") as string;
-                            if (string.IsNullOrWhiteSpace(displayName) || !names.Any(name => displayName.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)) continue;
-                            if (string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase) &&
-                                displayName.IndexOf("Redistributable", StringComparison.OrdinalIgnoreCase) < 0)
-                                continue;
-
-                            var modifyString = item.GetValue("ModifyString") as string;
-                            var modifyPath = item.GetValue("ModifyPath") as string;
-                            var maintenanceCommand = !string.IsNullOrWhiteSpace(modifyString) ? modifyString : modifyPath;
-                            if (!string.IsNullOrWhiteSpace(maintenanceCommand)) return NormalizeRepairCommand(maintenanceCommand);
-
-                            var repairString = item.GetValue("RepairString") as string;
-                            if (!string.IsNullOrWhiteSpace(repairString)) return NormalizeRepairCommand(repairString);
-                        }
-                    }
-                }
-            }
-
-            return string.Empty;
+            return (value ?? string.Empty).Replace("'", "''");
         }
 
         private static string[] BuildDisplayNameCandidates(LibraryDefinition definition)

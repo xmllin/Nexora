@@ -199,6 +199,16 @@ namespace Nexora
                     }
                 }
             }
+            else if (id == "tor-browser")
+            {
+                result = result
+                    .Where(item => {
+                        var url = item?.Download?.Url ?? string.Empty;
+                        return url.IndexOf("tor-browser-windows-x86_64-portable-", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               url.IndexOf("tor-browser-windows-i686-portable-", StringComparison.OrdinalIgnoreCase) >= 0;
+                    })
+                    .ToList();
+            }
             else if (id == "aida64")
             {
                 result = result

@@ -145,6 +145,13 @@ namespace Nexora
 
             var id = (app?.Id ?? string.Empty).Trim().ToLowerInvariant();
 
+            if (string.Equals(app?.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+            {
+                result = result
+                    .Where(item => string.Equals(item?.Download?.Source, "WinGet", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
             if (id == "firefox")
             {
                 result = result

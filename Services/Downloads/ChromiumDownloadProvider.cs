@@ -69,6 +69,11 @@ namespace Nexora.Services.Downloads
                 .OrderByDescending(x => x.Number)
                 .Select(x => new { Snapshot = x, Version = ResolveChromiumVersion(x.Number, releaseMap) })
                 .Where(x => !string.IsNullOrWhiteSpace(x.Version))
+                // Several snapshots can belong to one Chromium product version.
+                // Keep only the newest snapshot for each real product version.
+                .GroupBy(x => x.Version, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(x => x.Snapshot.Number).First())
+                .OrderByDescending(x => VersionInfo.Parse(x.Version))
                 .Take(30)
                 .Select(x => CreateRelease(x.Snapshot.Value, storagePlatform, x.Version))
                 .ToList();
@@ -232,7 +237,7 @@ namespace Nexora.Services.Downloads
                 // Snapshot revisions are commit/build identifiers. When ChromiumDash
                 // can map the snapshot to a released Chromium version, show that real
                 // product version while keeping the revision available for precision.
-                Version = revision,
+                Version = semanticVersion,
                 DisplayVersion = displayVersion,
                 Title = "Chromium " + displayVersion,
                 Download = new DownloadInfo
@@ -240,7 +245,7 @@ namespace Nexora.Services.Downloads
                     Url = url,
                     FileName = fileName,
                     Source = "Chromium",
-                    Version = revision
+                    Version = semanticVersion
                 }
             };
         }

@@ -206,6 +206,41 @@
     ]
   },
   {
+    "id": "dotnet-framework-481",
+    "name": ".NET Framework 4.8.1",
+    "category": ".NET Framework",
+    "description": "Актуальная ветка .NET Framework для запуска классических приложений Windows.",
+    "purpose": "Совместимость с приложениями, которым требуется .NET Framework 4.8.1 или новее.",
+    "componentType": "Базовый компонент",
+    "architectures": [
+      "x86",
+      "x64",
+      "arm64"
+    ],
+    "recommendationTags": [
+      "dotnet-framework-481"
+    ],
+    "version": "4.8.1",
+    "versionRule": "Актуальная ветка Framework",
+    "sourceUrl": "https://dotnet.microsoft.com/download/dotnet-framework/net481",
+    "downloadUrl": "https://download.microsoft.com/download/4/b/2/cd00d4ed-ebdd-49ee-8a33-eabc3d1030e3/NDP481-x86-x64-AllOS-ENU.exe",
+    "fileName": "NDP481-x86-x64-AllOS-ENU.exe",
+    "silentArguments": "/quiet /norestart",
+    "canInstallAutomatically": true,
+    "detectionType": "registrykey",
+    "detectionValue": "SOFTWARE\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full\\Release",
+    "requirements": [
+      "Windows 10 версии 20H2 и новее или Windows 11"
+    ],
+    "warnings": [
+      "На Windows 11 22H2 и новее .NET Framework 4.8.1 уже входит в систему."
+    ],
+    "usedBy": [
+      "Классические приложения Windows",
+      "Программы на .NET Framework"
+    ]
+  },
+  {
     "id": "dotnet-framework-35",
     "name": ".NET Framework 3.5",
     "category": ".NET Framework",

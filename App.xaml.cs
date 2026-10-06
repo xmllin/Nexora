@@ -43,6 +43,12 @@ namespace Nexora
                 new MouseEventHandler(HandleWindowPreviewMouseMove),
                 true);
 
+            EventManager.RegisterClassHandler(
+                typeof(Window),
+                Mouse.MouseLeaveEvent,
+                new MouseEventHandler(HandleWindowMouseLeave),
+                true);
+
             if (e.Args.Any(arg => string.Equals(arg, "--diagnose-catalog", StringComparison.OrdinalIgnoreCase)))
             {
                 await RunCatalogDiagnosticsAsync();
@@ -80,6 +86,12 @@ namespace Nexora
             }
 
             return null;
+        }
+
+        private static void HandleWindowMouseLeave(object sender, MouseEventArgs e)
+        {
+            if (Mouse.OverrideCursor == Cursors.No)
+                Mouse.OverrideCursor = null;
         }
 
         private static void HandleButtonQueryCursor(object sender, QueryCursorEventArgs e)

@@ -366,7 +366,7 @@ namespace Nexora.Pages
                 x.Status != LibraryInstallStatus.Installed).ToList();
             if (selected.Count == 0)
             {
-                AppDialog.ShowInfo(Window.GetWindow(this), "Библиотеки", "Выберите устанавливаемые компоненты. Компоненты без автоматической установки отображаются как «Не установлено» и требуют установки вручную.");
+                AppDialog.ShowInfo(Window.GetWindow(this), "Библиотеки", "Выберите устанавливаемые компоненты. Компоненты без автоматической установки отображаются как «Не установлено».");
                 return;
             }
             if (!AppDialog.ShowConfirm(Window.GetWindow(this), "Подтверждение", "Установить выбранные компоненты? Установщики будут запущены с правами администратора.")) return;

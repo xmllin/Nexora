@@ -269,7 +269,7 @@ namespace Nexora.Pages
             LibraryDetailsDialog.Show(Window.GetWindow(this), item);
         }
 
-        private async void Repair_Click(object sender, RoutedEventArgs e)
+        private async void Reinstall_Click(object sender, RoutedEventArgs e)
         {
             var item = (sender as Button)?.Tag as LibraryItem;
             if (item == null || item.IsBusy) return;
@@ -468,43 +468,7 @@ namespace Nexora.Pages
                 }
                 else
                 {
-                    try
-                    {
-                        await _installation.UninstallAsync(item.Definition, CancellationToken.None);
-                    }
-                    catch (FileNotFoundException) when (string.Equals(item.Definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // The cached/registered maintenance executable can disappear
-                        // after cleanup. Download a fresh official installer and use
-                        // its supported /uninstall mode instead of leaving the item stuck.
-                        if (string.IsNullOrWhiteSpace(item.Definition.DownloadUrl))
-                            throw;
-
-                        item.ShowProgress = true;
-                        item.ProgressOpacity = 1;
-                        item.Progress = 0;
-                        item.ProgressText = "Скачивание установщика для удаления…";
-                        item.Notify(nameof(item.ShowProgress));
-                        item.Notify(nameof(item.ProgressOpacity));
-                        item.Notify(nameof(item.Progress));
-                        item.Notify(nameof(item.ProgressText));
-
-                        var progress = new Progress<DownloadProgress>(p =>
-                        {
-                            item.Progress = p.Progress < 0 ? 0 : p.Progress;
-                            item.ProgressText = FormatProgress(p);
-                            item.Notify(nameof(item.Progress));
-                            item.Notify(nameof(item.ProgressText));
-                        });
-
-                        var installerPath = await _downloads.DownloadAsync(
-                            item.Definition,
-                            progress,
-                            CancellationToken.None);
-
-                        await _installation.UninstallWithInstallerAsync(item.Definition, installerPath, CancellationToken.None);
-                        try { File.Delete(installerPath); } catch { }
-                    }
+                    await _installation.UninstallAsync(item.Definition, CancellationToken.None);
                 }
 
                 var detected = item.IsWindowsFeature

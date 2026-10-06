@@ -205,10 +205,10 @@ namespace Nexora.Services.Libraries
                 names.Select(name => "'" + EscapePowerShellSingleQuoted(name) + "'"));
             var categoryLiteral = EscapePowerShellSingleQuoted(category ?? string.Empty);
 
-            const string template = @"
+            const string template = """
 $ErrorActionPreference = 'Stop'
-$names = @(%%NAMES%%)
-$category = '%%CATEGORY%%'
+$names = @({{NAMES}})
+$category = '{{CATEGORY}}'
 $roots = @(
     'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
@@ -220,9 +220,7 @@ foreach ($root in $roots) {
         $items = @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)
         foreach ($item in $items) {
             $displayName = [string]$item.DisplayName
-            if ([string]::IsNullOrWhiteSpace($displayName)) {
-                continue
-            }
+            if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
 
             if ($category -eq 'Visual C++ Redistributable' -and
                 $displayName.IndexOf('Redistributable', [StringComparison]::OrdinalIgnoreCase) -lt 0) {
@@ -244,9 +242,7 @@ foreach ($root in $roots) {
         }
     } catch {}
 
-    if ($null -ne $target) {
-        break
-    }
+    if ($null -ne $target) { break }
 }
 
 if ($null -eq $target) {
@@ -270,7 +266,8 @@ if ($guidMatch.Success -and $command -match '(?i)(^|[\s\\/])msiexec(?:\.exe)?([\
 if ($command -match '^\s*"([^"]+)"\s*(.*)$') {
     $file = $Matches[1]
     $args = $Matches[2]
-} else {
+}
+else {
     $parts = $command.Trim() -split '\s+', 2
     $file = $parts[0]
     $args = if ($parts.Count -gt 1) { $parts[1] } else { '' }
@@ -283,11 +280,11 @@ if (-not (Test-Path -LiteralPath $file)) {
 
 $p = Start-Process -FilePath $file -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
 exit $p.ExitCode
-";
+""";
 
             return template
-                .Replace("%%NAMES%%", nameLiterals)
-                .Replace("%%CATEGORY%%", categoryLiteral);
+                .Replace("{{NAMES}}", nameLiterals)
+                .Replace("{{CATEGORY}}", categoryLiteral);
         }
 
         private static string EscapePowerShellSingleQuoted(string value)

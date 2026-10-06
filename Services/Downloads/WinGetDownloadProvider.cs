@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -48,6 +49,7 @@ namespace Nexora.Services.Downloads
                 "show",
                 "--id", app.Download.PackageId,
                 "--exact",
+                "--locale", "en-US",
                 "--accept-source-agreements",
                 "--disable-interactivity"
             };
@@ -126,9 +128,35 @@ namespace Nexora.Services.Downloads
 
             var result = await RunProcessAsync(winget, args, token, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
             if (result.ExitCode != 0)
+            {
+                // Some manifests reject an explicit architecture/installer-type
+                // combination even though the package/version itself is valid.
+                var relaxedArgs = new List<string>
+                {
+                    "show",
+                    "--id", info.PackageId ?? app.Download.PackageId,
+                    "--exact",
+                    "--version", info.Version,
+                    "--locale", "en-US",
+                    "--accept-source-agreements",
+                    "--disable-interactivity"
+                };
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    relaxedArgs.Add("--source");
+                    relaxedArgs.Add(source);
+                }
+
+                result = await RunProcessAsync(winget, relaxedArgs, token, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            }
+
+            if (result.ExitCode != 0)
                 return;
 
             var installerUrl = ParseField(result.StandardOutput, "Installer Url", "Installer URL", "Install Url", "Install URL");
+            if (string.IsNullOrWhiteSpace(installerUrl))
+                installerUrl = ExtractInstallerUrl(result.StandardOutput);
+
             var resolvedType = ParseField(result.StandardOutput, "Installer Type");
             if (!string.IsNullOrWhiteSpace(resolvedType))
                 info.InstallerType = resolvedType;
@@ -149,6 +177,26 @@ namespace Nexora.Services.Downloads
                 info.SizeBytes = probe.SizeBytes;
             else
                 info.SizeBytes = await metadata.GetSizeAsync(info.Url, token).ConfigureAwait(false);
+        }
+
+        private static string ExtractInstallerUrl(string output)
+        {
+            if (string.IsNullOrWhiteSpace(output))
+                return string.Empty;
+
+            foreach (Match match in Regex.Matches(output, @"https?://[^\s<>]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                var url = match.Value.TrimEnd('.', ',', ';', ')', ']', '}');
+                if (url.IndexOf(".exe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    url.IndexOf(".msi", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    url.IndexOf(".msix", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    url.IndexOf(".appx", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    url.IndexOf(".zip", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    url.IndexOf(".7z", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return url;
+            }
+
+            return string.Empty;
         }
 
         private static string ParseField(string output, params string[] fieldNames)
@@ -259,8 +307,8 @@ namespace Nexora.Services.Downloads
                     "--accept-source-agreements",
                     "--accept-package-agreements",
                     "--skip-license",
-                    "--skip-dependencies",
-                    "--disable-interactivity"
+                    "--disable-interactivity",
+                    "--locale", "en-US"
                 };
 
                 var source = string.IsNullOrWhiteSpace(info.PackageSource)
@@ -718,7 +766,9 @@ namespace Nexora.Services.Downloads
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
             };
 
             foreach (var argument in arguments ?? Enumerable.Empty<string>())

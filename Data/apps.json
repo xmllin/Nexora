@@ -377,7 +377,7 @@
     "download": {
       "type": "GitHub",
       "repository": "tonhowtf/omniget",
-      "assetPattern": "omniget-cli-*-x86_64-pc-windows-msvc.zip"
+      "assetPattern": "omniget_*-x64-setup.exe"
     }
   },
   {
@@ -619,7 +619,7 @@
     "website": "https://visualstudio.microsoft.com/",
     "download": {
       "type": "WinGet",
-      "packageId": "Microsoft.VisualStudio.Community",
+      "packageId": "Microsoft.VisualStudio.2022.Community",
       "packageSource": "winget"
     }
   },

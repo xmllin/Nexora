@@ -14,11 +14,20 @@ namespace Nexora.Infrastructure.HTTP
     {
         private static readonly HttpClient Client = CreateClient();
 
-        public async Task<string> DownloadFileAsync(string url, string directory, string fileName, IProgress<DownloadProgress> progress, CancellationToken token)
+        public async Task<string> DownloadFileAsync(
+            string url,
+            string directory,
+            string fileName,
+            IProgress<DownloadProgress> progress,
+            CancellationToken token,
+            PauseController pauseController = null)
         {
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, Sanitize(fileName));
-            await DownloadCoreAsync(url, path, progress, token, false, null).ConfigureAwait(false);
+            var resume = pauseController == null
+                ? null
+                : new ResumeContext { PauseController = pauseController };
+            await DownloadCoreAsync(url, path, progress, token, false, resume).ConfigureAwait(false);
             return path;
         }
 

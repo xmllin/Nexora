@@ -17,7 +17,7 @@ namespace Nexora.Services.Libraries
             _http = http ?? new HttpDownloadClient();
         }
 
-        public async Task<string> DownloadAsync(LibraryDefinition definition, IProgress<DownloadProgress> progress, CancellationToken token)
+        public async Task<string> DownloadAsync(LibraryDefinition definition, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController = null)
         {
             if (definition == null || string.IsNullOrWhiteSpace(definition.DownloadUrl))
                 throw new InvalidOperationException("Для компонента не задан URL загрузки.");
@@ -27,7 +27,7 @@ namespace Nexora.Services.Libraries
             var folder = Path.Combine(Path.GetTempPath(), "Nexora", "Libraries");
             var name = string.IsNullOrWhiteSpace(definition.FileName) ? Path.GetFileName(uri.AbsolutePath) : definition.FileName;
             if (string.IsNullOrWhiteSpace(name)) name = definition.Id + ".download";
-            var path = await _http.DownloadFileAsync(definition.DownloadUrl, folder, name, progress, token).ConfigureAwait(false);
+            var path = await _http.DownloadFileAsync(definition.DownloadUrl, folder, name, progress, token, pauseController).ConfigureAwait(false);
             await FileValidator.ValidateAsync(path, new DownloadDefinition { FileName = name }, token).ConfigureAwait(false);
             return path;
         }

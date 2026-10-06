@@ -17,6 +17,22 @@ namespace Nexora.Services.Libraries
             _http = http ?? new HttpDownloadClient();
         }
 
+        public string GetDownloadPath(LibraryDefinition definition)
+        {
+            if (definition == null)
+                return string.Empty;
+
+            var folder = Path.Combine(Path.GetTempPath(), "Nexora", "Libraries");
+            var name = string.IsNullOrWhiteSpace(definition.FileName)
+                ? definition.Id + ".download"
+                : definition.FileName;
+
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                name = name.Replace(invalid, '_');
+
+            return Path.Combine(folder, name);
+        }
+
         public async Task<string> DownloadAsync(LibraryDefinition definition, IProgress<DownloadProgress> progress, CancellationToken token, PauseController pauseController = null)
         {
             if (definition == null || string.IsNullOrWhiteSpace(definition.DownloadUrl))

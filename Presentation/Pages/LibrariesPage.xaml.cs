@@ -50,7 +50,7 @@ namespace Nexora.Pages
                     var item = _detection.Detect(definition);
                     if (item == null) continue;
 
-                    item.IsRecommended = IsRecommendedForSystem(definition);
+                    item.IsRecommended = IsRecommendedForSystem(definition) && item.Status != LibraryInstallStatus.Installed;
                     _items.Add(item);
                 }
                 BuildFilters();
@@ -90,6 +90,7 @@ namespace Nexora.Pages
                 var wasInstalled = item.Status == LibraryInstallStatus.Installed;
                 item.Status = detected.Status;
                 item.InstalledVersion = detected.InstalledVersion;
+                item.IsRecommended = IsRecommendedForSystem(item.Definition) && item.Status != LibraryInstallStatus.Installed;
                 if (!wasInstalled && item.Status == LibraryInstallStatus.Installed)
                     DeleteDownloadedInstaller(item.Definition);
                 item.Refresh();
@@ -102,7 +103,7 @@ namespace Nexora.Pages
         {
             CategoryComboBox.ItemsSource = new[] { "Все категории" }.Concat(_items.Select(x => x.Definition.Category).Distinct(StringComparer.OrdinalIgnoreCase)).ToList();
             CategoryComboBox.SelectedIndex = 0;
-            StatusComboBox.ItemsSource = new[] { "Все статусы", "Установлено", "Не установлено", "Доступно обновление", "Рекомендуемые" };
+            StatusComboBox.ItemsSource = new[] { "Все статусы", "Установлено", "Не установлено", "Доступно обновление", "Рекомендуемое" };
             StatusComboBox.SelectedIndex = 0;
         }
 
@@ -113,8 +114,8 @@ namespace Nexora.Pages
             var category = CategoryComboBox?.SelectedItem as string;
             var status = StatusComboBox?.SelectedItem as string;
             var matchesCategory = string.IsNullOrWhiteSpace(category) || category == "Все категории" || string.Equals(item.Definition.Category, category, StringComparison.OrdinalIgnoreCase);
-            var matchesRecommended = status != "Рекомендуемые" || item.IsRecommended;
-            var matchesStatusValue = status == "Рекомендуемые" || string.IsNullOrWhiteSpace(status) || status == "Все статусы" || string.Equals(item.StatusText, status, StringComparison.OrdinalIgnoreCase);
+            var matchesRecommended = status != "Рекомендуемое" || item.IsRecommended;
+            var matchesStatusValue = status == "Рекомендуемое" || string.IsNullOrWhiteSpace(status) || status == "Все статусы" || string.Equals(item.StatusText, status, StringComparison.OrdinalIgnoreCase);
             return matchesCategory && matchesStatusValue && matchesRecommended;
         }
 
@@ -375,28 +376,37 @@ namespace Nexora.Pages
 
         private bool IsRecommendedForSystem(LibraryDefinition definition)
         {
-            if (definition == null ||
-                !string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
+            if (definition == null)
                 return false;
 
-            var architecture = PlatformDetectionService.Current.Architecture ?? "x64";
+            var platform = PlatformDetectionService.Current;
+            var architecture = platform.Architecture ?? "x64";
+            var id = (definition.Id ?? string.Empty).ToLowerInvariant();
+
+            if (id == "dotnet-framework-481")
+            {
+                // .NET Framework 4.8.1 is installable on Windows 10 20H2+;
+                // ARM64 support starts with Windows 11.
+                if (!platform.IsWindows10OrNewer || platform.WindowsBuild < 19042)
+                    return false;
+                if (architecture == "arm64" && platform.WindowsBuild < 22000)
+                    return false;
+
+                var detected = _detection.Detect(definition);
+                return detected.Status != LibraryInstallStatus.Installed;
+            }
+
+            if (!string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
+                return false;
 
             if (definition.RecommendationTags != null &&
                 definition.RecommendationTags.Contains("vcpp-v14-x64", StringComparer.OrdinalIgnoreCase))
-            {
-                var detected = _detection.Detect(definition);
-                return (architecture == "x64" || architecture == "arm64") && detected.Status != LibraryInstallStatus.Installed;
-            }
+                return (architecture == "x64" || architecture == "arm64");
 
             if (definition.RecommendationTags != null &&
                 definition.RecommendationTags.Contains("vcpp-v14-x86", StringComparer.OrdinalIgnoreCase))
-            {
-                var detected = _detection.Detect(definition);
-                return architecture == "x64" && detected.Status != LibraryInstallStatus.Installed;
-            }
+                return architecture == "x64";
 
-            // Legacy VC++ packages become recommended only when an explicit
-            // dependency detector marks the application as requiring them.
             return false;
         }
 

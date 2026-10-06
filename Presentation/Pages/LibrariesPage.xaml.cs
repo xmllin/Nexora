@@ -213,25 +213,16 @@ namespace Nexora.Pages
             var item = (sender as MenuItem)?.Tag as LibraryItem;
             if (item == null) return;
 
-            var file = item.DownloadedFilePath;
-            if (!string.IsNullOrWhiteSpace(file) && File.Exists(file))
-            {
-                try
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "explorer.exe",
-                        Arguments = "/select,\"" + file.Replace("\"", "\\\"") + "\"",
-                        UseShellExecute = true
-                    });
-                    return;
-                }
-                catch { }
-            }
-
+            // The installer cache is always stored here. Do not probe File.Exists
+            // on the UI thread: a stale or inaccessible path can make Explorer
+            // appear to hang while Windows resolves the file.
             var folder = Path.Combine(Path.GetTempPath(), "Nexora", "Libraries");
-            Directory.CreateDirectory(folder);
-            OpenFolder(folder);
+            try
+            {
+                Directory.CreateDirectory(folder);
+                OpenFolder(folder);
+            }
+            catch { }
         }
 
         private void MoreActions_Click(object sender, RoutedEventArgs e)
@@ -282,29 +273,40 @@ namespace Nexora.Pages
         {
             var item = (sender as Button)?.Tag as LibraryItem;
             if (item == null) return;
+
             try
             {
+                // If the original maintenance/uninstaller executable is gone,
+                // start a normal download-and-install flow instead of trying
+                // to repair a file that no longer exists.
+                if (!item.IsWindowsFeature && !_installation.HasRepairCommand(item.Definition))
+                {
+                    var downloadTask = DownloadLibraryAsync(item, installAfterDownload: true);
+                    _activeDownloads.Add(downloadTask);
+                    try
+                    {
+                        await downloadTask;
+                    }
+                    finally
+                    {
+                        _activeDownloads.Remove(downloadTask);
+                    }
+                    return;
+                }
+
                 item.IsBusy = true;
                 item.Notify(nameof(item.IsBusy));
                 item.Notify(nameof(item.ShowProgress));
                 item.Notify(nameof(item.CanPauseDownload));
                 item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = "Восстановление: " + item.Definition.Name;
+
                 if (item.IsWindowsFeature)
                 {
                     await _installation.InstallWindowsFeatureAsync(item.Definition, CancellationToken.None);
                 }
                 else
                 {
-                    // "Переустановить" should work even when the installed
-                    // component's maintenance/uninstaller file has been removed.
-                    // In that case download a fresh installer and run it.
-                    if (!_installation.HasRepairCommand(item.Definition))
-                    {
-                        await DownloadLibraryAsync(item, installAfterDownload: true);
-                        return;
-                    }
-
                     await _installation.RepairAsync(item.Definition, CancellationToken.None);
                 }
 

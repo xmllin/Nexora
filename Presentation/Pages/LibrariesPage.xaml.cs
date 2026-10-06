@@ -514,6 +514,8 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.ProgressOpacity));
                 item.Notify(nameof(item.Progress));
                 item.Notify(nameof(item.ProgressText));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = installAfterDownload ? "Скачивание и запуск установщика: " + item.Definition.Name : "Скачивание: " + item.Definition.Name;
 
                 var path = await _downloads.DownloadAsync(item.Definition, progress, item.DownloadCancellation.Token, item.DownloadPauseController);

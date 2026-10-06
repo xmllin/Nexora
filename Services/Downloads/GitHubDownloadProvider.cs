@@ -221,7 +221,11 @@ namespace Nexora.Services.Downloads
                     var name = WebUtility.HtmlDecode(Uri.UnescapeDataString(link.Groups[3].Value));
                     if (!AssetSelector.WildcardMatch(name, pattern) || !tags.Add(tag + "|" + name)) continue;
 
-                    var version = VersionNormalizer.ExtractMostSpecific(tag, name);
+                    // Git tags are the authoritative version. Do not let the
+                    // Telegram x64 asset name add "64" to the product version.
+                    var version = VersionNormalizer.ExtractMostSpecific(tag);
+                    if (string.IsNullOrWhiteSpace(version))
+                        version = VersionNormalizer.ExtractMostSpecific(name);
                     releases.Add(new AppRelease
                     {
                         Version = string.IsNullOrWhiteSpace(version) ? tag : version,

@@ -62,10 +62,7 @@ namespace Nexora.Services.Libraries
             if (definition == null || string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
                 throw new InvalidOperationException("Файл установщика не найден.");
 
-            var script = BuildStartProcessScript(
-                installerPath,
-                string.Empty,
-                waitForExit: true);
+            var script = BuildStartProcessScript(installerPath, string.Empty);
 
             var exitCode = await RunHiddenPowerShellAsync(script, token);
 
@@ -207,7 +204,7 @@ namespace Nexora.Services.Libraries
             }
         }
 
-        private static string BuildStartProcessScript(string filePath, string arguments, bool waitForExit)
+        private static string BuildStartProcessScript(string filePath, string arguments)
         {
             var escapedFile = EscapePowerShellSingleQuoted(filePath);
             var escapedArguments = EscapePowerShellSingleQuoted(arguments ?? string.Empty);

@@ -688,8 +688,13 @@ namespace Nexora.Pages
 
                 item.DownloadCancellation?.Dispose();
                 item.DownloadPauseController?.Dispose();
-                item.DownloadCancellation = new CancellationTokenSource();
-                item.DownloadPauseController = new PauseController();
+
+                var downloadCancellation = new CancellationTokenSource();
+                var downloadPauseController = new PauseController();
+                var downloadToken = downloadCancellation.Token;
+
+                item.DownloadCancellation = downloadCancellation;
+                item.DownloadPauseController = downloadPauseController;
                 item.DownloadedFilePath = _downloads.GetDownloadPath(item.Definition);
 
                 item.IsBusy = true;
@@ -710,7 +715,7 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = installAfterDownload ? "Скачивание и запуск установщика: " + item.Definition.Name : "Скачивание: " + item.Definition.Name;
 
-                var path = await _downloads.DownloadAsync(item.Definition, progress, item.DownloadCancellation.Token, item.DownloadPauseController);
+                var path = await _downloads.DownloadAsync(item.Definition, progress, downloadToken, downloadPauseController);
                 item.DownloadedFilePath = path;
                 item.Progress = 100;
                 item.ProgressText = "Загружено: " + FormatBytes(new FileInfo(path).Length);
@@ -726,7 +731,7 @@ namespace Nexora.Pages
 
                 if (installAfterDownload)
                 {
-                    await _installation.InstallAsync(item.Definition, path, item.DownloadCancellation.Token);
+                    await _installation.InstallAsync(item.Definition, path, downloadToken);
                     var detected = _detection.Detect(item.Definition);
                     item.Status = detected.Status;
                     item.InstalledVersion = detected.InstalledVersion;
@@ -783,10 +788,14 @@ namespace Nexora.Pages
             }
             finally
             {
-                item.DownloadPauseController?.Dispose();
-                item.DownloadCancellation?.Dispose();
-                item.DownloadPauseController = null;
-                item.DownloadCancellation = null;
+                if (ReferenceEquals(item.DownloadPauseController, downloadPauseController))
+                    item.DownloadPauseController = null;
+                if (ReferenceEquals(item.DownloadCancellation, downloadCancellation))
+                    item.DownloadCancellation = null;
+
+                downloadPauseController.Dispose();
+                downloadCancellation.Dispose();
+
                 item.Notify(nameof(item.IsPaused));
                 item.Notify(nameof(item.CanPauseDownload));
                 item.Notify(nameof(item.CanResumeDownload));

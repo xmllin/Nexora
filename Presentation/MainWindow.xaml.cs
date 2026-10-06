@@ -814,6 +814,11 @@ namespace Nexora
 
         public void UpdateDownloadProgress(string key, DownloadProgress details, string appName = null)
         {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(() => UpdateDownloadProgress(key, details, appName)));
+                return;
+            }
             if (details == null || !_activeDownloads.TryGetValue(key.ToLowerInvariant(), out var entry)) return;
             if (!string.IsNullOrWhiteSpace(appName)) entry.Label = "Загрузка: " + appName;
             if (details.Progress >= 0) entry.ProgressValue = Math.Max(0, Math.Min(100, details.Progress));

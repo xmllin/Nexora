@@ -272,66 +272,116 @@ namespace Nexora.Pages
         private async void Repair_Click(object sender, RoutedEventArgs e)
         {
             var item = (sender as Button)?.Tag as LibraryItem;
-            if (item == null) return;
+            if (item == null || item.IsBusy) return;
 
             try
             {
-                // If the original maintenance/uninstaller executable is gone,
-                // start a normal download-and-install flow instead of trying
-                // to repair a file that no longer exists.
-                if (!item.IsWindowsFeature && !_installation.HasRepairCommand(item.Definition))
-                {
-                    var downloadTask = DownloadLibraryAsync(item, installAfterDownload: true);
-                    _activeDownloads.Add(downloadTask);
-                    try
-                    {
-                        await downloadTask;
-                    }
-                    finally
-                    {
-                        _activeDownloads.Remove(downloadTask);
-                    }
-                    return;
-                }
-
                 item.IsBusy = true;
+                item.ShowProgress = false;
                 item.Notify(nameof(item.IsBusy));
                 item.Notify(nameof(item.ShowProgress));
-                item.Notify(nameof(item.CanPauseDownload));
-                item.Notify(nameof(item.CanResumeDownload));
-                InstallStatusText.Text = "Восстановление: " + item.Definition.Name;
+                InstallStatusText.Text = "Подготовка установщика: " + item.Definition.Name;
 
-                if (item.IsWindowsFeature)
+                // Reinstall means opening the actual installer. If the cached
+                // installer was removed, download a fresh official copy first.
+                var installerPath = _installation.GetCachedInstallerPath(item.Definition);
+                if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
                 {
-                    await _installation.InstallWindowsFeatureAsync(item.Definition, CancellationToken.None);
+                    if (string.IsNullOrWhiteSpace(item.Definition.DownloadUrl))
+                        throw new InvalidOperationException("Для переустановки не задан источник установщика.");
+
+                    item.ShowProgress = true;
+                    item.ProgressOpacity = 1;
+                    item.Progress = 0;
+                    item.ProgressText = "Скачивание установщика…";
+                    item.DownloadCancellation?.Dispose();
+                    item.DownloadPauseController?.Dispose();
+                    item.DownloadCancellation = new CancellationTokenSource();
+                    item.DownloadPauseController = new PauseController();
+                    item.Notify(nameof(item.ShowProgress));
+                    item.Notify(nameof(item.ProgressOpacity));
+                    item.Notify(nameof(item.Progress));
+                    item.Notify(nameof(item.ProgressText));
+
+                    var progress = new Progress<DownloadProgress>(p =>
+                    {
+                        item.Progress = p.Progress < 0 ? 0 : p.Progress;
+                        item.ProgressText = FormatProgress(p);
+                        item.Notify(nameof(item.Progress));
+                        item.Notify(nameof(item.ProgressText));
+                    });
+
+                    installerPath = await _downloads.DownloadAsync(
+                        item.Definition,
+                        progress,
+                        item.DownloadCancellation.Token,
+                        item.DownloadPauseController);
+
+                    item.DownloadedFilePath = installerPath;
+                    item.Progress = 100;
+                    item.ProgressText = "Установщик загружен";
+                    item.Notify(nameof(item.DownloadedFilePath));
+                    item.Notify(nameof(item.HasDownloadedFile));
+                    item.Notify(nameof(item.Progress));
+                    item.Notify(nameof(item.ProgressText));
                 }
-                else
-                {
-                    await _installation.RepairAsync(item.Definition, CancellationToken.None);
-                }
+
+                InstallStatusText.Text = "Запуск установщика: " + item.Definition.Name;
+                await _installation.LaunchInstallerAsync(item.Definition, installerPath, CancellationToken.None);
 
                 var detected = _detection.Detect(item.Definition);
                 item.Status = detected.Status;
                 item.InstalledVersion = detected.InstalledVersion;
+                item.IsSelected = false;
                 item.IsBusy = false;
                 item.Notify(nameof(item.Status));
-                item.Notify(nameof(item.ShowRecommended));
                 item.Notify(nameof(item.InstalledVersion));
+                item.Notify(nameof(item.IsSelected));
                 item.Notify(nameof(item.IsBusy));
-                InstallStatusText.Text = "Восстановление завершено: " + item.Definition.Name;
+                InstallStatusText.Text = detected.Status == LibraryInstallStatus.Installed
+                    ? "Переустановка завершена: " + item.Definition.Name
+                    : "Установщик завершён: " + item.Definition.Name;
+                item.Refresh();
+
+                await HideProgressAfterDelayAsync(item);
             }
             catch (OperationCanceledException)
             {
                 item.IsBusy = false;
+                item.ShowProgress = false;
                 item.Notify(nameof(item.IsBusy));
-                InstallStatusText.Text = "Восстановление отменено: " + item.Definition.Name;
+                item.Notify(nameof(item.ShowProgress));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
+                InstallStatusText.Text = "Переустановка отменена: " + item.Definition.Name;
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                // UAC cancellation is a normal user action, not an installer error.
+                item.IsBusy = false;
+                item.ShowProgress = false;
+                item.Notify(nameof(item.IsBusy));
+                item.Notify(nameof(item.ShowProgress));
+                InstallStatusText.Text = "Переустановка отменена: " + item.Definition.Name;
             }
             catch (Exception ex)
             {
                 item.IsBusy = false;
+                item.ShowProgress = false;
                 item.Notify(nameof(item.IsBusy));
-                InstallStatusText.Text = "Ошибка восстановления: " + ex.Message;
+                item.Notify(nameof(item.ShowProgress));
+                InstallStatusText.Text = "Ошибка переустановки: " + ex.Message;
                 AppDialog.ShowInfo(Window.GetWindow(this), item.Definition.Name, ex.Message);
+            }
+            finally
+            {
+                item.DownloadPauseController?.Dispose();
+                item.DownloadCancellation?.Dispose();
+                item.DownloadPauseController = null;
+                item.DownloadCancellation = null;
+                item.Notify(nameof(item.IsPaused));
+                item.Notify(nameof(item.CanPauseDownload));
+                item.Notify(nameof(item.CanResumeDownload));
             }
         }
 
@@ -413,9 +463,49 @@ namespace Nexora.Pages
                 InstallStatusText.Text = "Удаление: " + item.Definition.Name;
 
                 if (item.IsWindowsFeature)
+                {
                     await _installation.UninstallWindowsFeatureAsync(item.Definition, CancellationToken.None);
+                }
                 else
-                    await _installation.UninstallAsync(item.Definition, CancellationToken.None);
+                {
+                    try
+                    {
+                        await _installation.UninstallAsync(item.Definition, CancellationToken.None);
+                    }
+                    catch (FileNotFoundException) when (string.Equals(item.Definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // The cached/registered maintenance executable can disappear
+                        // after cleanup. Download a fresh official installer and use
+                        // its supported /uninstall mode instead of leaving the item stuck.
+                        if (string.IsNullOrWhiteSpace(item.Definition.DownloadUrl))
+                            throw;
+
+                        item.ShowProgress = true;
+                        item.ProgressOpacity = 1;
+                        item.Progress = 0;
+                        item.ProgressText = "Скачивание установщика для удаления…";
+                        item.Notify(nameof(item.ShowProgress));
+                        item.Notify(nameof(item.ProgressOpacity));
+                        item.Notify(nameof(item.Progress));
+                        item.Notify(nameof(item.ProgressText));
+
+                        var progress = new Progress<DownloadProgress>(p =>
+                        {
+                            item.Progress = p.Progress < 0 ? 0 : p.Progress;
+                            item.ProgressText = FormatProgress(p);
+                            item.Notify(nameof(item.Progress));
+                            item.Notify(nameof(item.ProgressText));
+                        });
+
+                        var installerPath = await _downloads.DownloadAsync(
+                            item.Definition,
+                            progress,
+                            CancellationToken.None);
+
+                        await _installation.UninstallWithInstallerAsync(item.Definition, installerPath, CancellationToken.None);
+                        try { File.Delete(installerPath); } catch { }
+                    }
+                }
 
                 var detected = item.IsWindowsFeature
                     ? _detection.Detect(item.Definition)
@@ -660,6 +750,8 @@ namespace Nexora.Pages
                 item.DownloadedFilePath = path;
                 item.Progress = 100;
                 item.ProgressText = "Загружено: " + FormatBytes(new FileInfo(path).Length);
+                // The file is ready, so pause/play/cancel controls are no longer needed.
+                item.ShowProgress = false;
                 item.Notify(nameof(item.Progress));
                 item.Notify(nameof(item.ProgressText));
                 item.Notify(nameof(item.DownloadedFilePath));

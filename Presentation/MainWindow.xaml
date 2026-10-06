@@ -88,20 +88,20 @@
             </Border>
 
             <Border x:Name="DownloadToast" Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,24,24" Padding="12,10" Background="#102A45" BorderBrush="#3D8FE8"
-                    BorderThickness="1" CornerRadius="10" Visibility="Collapsed" Opacity="0" Panel.ZIndex="20" MinWidth="280">
+                    Margin="0,0,24,24" Padding="0" Background="#0A1728" BorderBrush="#1B3048"
+                    BorderThickness="1" CornerRadius="8" Visibility="Collapsed" Opacity="0" Panel.ZIndex="20" MinWidth="300">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border x:Name="DownloadToastIconHost" Width="28" Height="28" CornerRadius="8" Background="#176BE0" Margin="0,0,10,0">
+                    <Border x:Name="DownloadToastIconHost" Width="28" Height="28" CornerRadius="8" Background="#176BE0" Margin="12,0,10,0">
                         <Image x:Name="DownloadToastIcon" Source="{local:SvgImage Source=interface/white/fluent-arrow-download.svg}" Width="16" Height="16"/>
                     </Border>
                     <TextBlock Grid.Column="1" x:Name="DownloadToastText" VerticalAlignment="Center" Foreground="#EEF5FF"
                                FontSize="13" TextWrapping="Wrap" MaxWidth="360"/>
-                    <Button Grid.Column="2" Width="26" Height="26" Margin="10,0,0,0" Padding="0" Background="Transparent" BorderBrush="Transparent"
+                    <Button Grid.Column="2" Width="28" Height="28" Margin="10,0,10,0" Padding="0" Background="Transparent" BorderBrush="Transparent"
                             Cursor="Hand" Click="CloseDownloadToast_Click">
                         <Button.Style>
                             <Style TargetType="Button">

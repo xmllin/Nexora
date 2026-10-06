@@ -58,7 +58,7 @@
             <Setter Property="BorderBrush" Value="#31516E"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="4"/>
-            <Setter Property="MinWidth" Value="218"/>
+            <Setter Property="MinWidth" Value="0"/>
             <Setter Property="TextElement.Foreground" Value="#F1F6FF"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -72,15 +72,16 @@
         </Style>
         <Style x:Key="LibraryMenuItem" TargetType="MenuItem">
             <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Margin" Value="2"/>
-            <Setter Property="MinWidth" Value="210"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
                         <Border x:Name="MenuBorder" Background="Transparent" CornerRadius="6" Padding="4">
-                            <ContentPresenter ContentSource="Header" Margin="6,2"/>
+                            <ContentPresenter ContentSource="Header" Margin="4,2" HorizontalAlignment="Left"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
@@ -396,8 +397,8 @@
                                 <TextBlock Text="{Binding ProgressText}" Opacity="{Binding ProgressOpacity}" Foreground="{StaticResource MutedBrush}" FontSize="10" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
                                 <ProgressBar Height="8" Margin="0,8,8,0" Opacity="{Binding ProgressOpacity}" Maximum="100" Value="{Binding Progress}" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
                             </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="2" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}">
-                                <Button Tag="{Binding}" Click="PauseResumeLibraryDownload_Click" Width="28" Height="26" Margin="2" Padding="0"
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}">
+                                <Button Tag="{Binding}" Click="PauseResumeLibraryDownload_Click" Width="30" Height="30" Margin="0" Padding="0"
                                         IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}">
                                     <Image Width="15" Height="15">
                                         <Image.Style>
@@ -412,8 +413,8 @@
                                         </Image.Style>
                                     </Image>
                                 </Button>
-                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Width="28" Height="26" Margin="2" Padding="0"
-                                        IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}" ToolTip="Отменить">
+                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Width="30" Height="30" Margin="0" Padding="0"
+                                        IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}">
                                     <Image Source="{local:SvgImage Source=interface/white/fluent-dismiss.svg}" Width="15" Height="15"/>
                                 </Button>
                             </StackPanel>

@@ -32,20 +32,8 @@ namespace Nexora
 
             EventManager.RegisterClassHandler(
                 typeof(Button),
-                Mouse.MouseEnterEvent,
-                new MouseEventHandler(HandleButtonMouseEnter),
-                true);
-
-            EventManager.RegisterClassHandler(
-                typeof(Button),
-                Mouse.MouseLeaveEvent,
-                new MouseEventHandler(HandleButtonMouseLeave),
-                true);
-
-            EventManager.RegisterClassHandler(
-                typeof(Button),
-                UIElement.IsEnabledChangedEvent,
-                new DependencyPropertyChangedEventHandler(HandleButtonEnabledChanged),
+                Mouse.QueryCursorEvent,
+                new QueryCursorEventHandler(HandleButtonQueryCursor),
                 true);
 
             if (e.Args.Any(arg => string.Equals(arg, "--diagnose-catalog", StringComparison.OrdinalIgnoreCase)))
@@ -60,33 +48,12 @@ namespace Nexora
             mainWindow.Show();
         }
 
-        private static void HandleButtonMouseEnter(object sender, MouseEventArgs e)
+        private static void HandleButtonQueryCursor(object sender, QueryCursorEventArgs e)
         {
             if (sender is Button button && !button.IsEnabled)
-                Mouse.OverrideCursor = Cursors.No;
-        }
-
-        private static void HandleButtonMouseLeave(object sender, MouseEventArgs e)
-        {
-            if (Mouse.OverrideCursor == Cursors.No)
-                Mouse.OverrideCursor = null;
-        }
-
-        private static void HandleButtonEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            if (!(sender is Button button))
-                return;
-
-            if (!button.IsEnabled)
             {
-                var position = Mouse.GetPosition(button);
-                if (position.X >= 0 && position.Y >= 0 &&
-                    position.X <= button.ActualWidth && position.Y <= button.ActualHeight)
-                    Mouse.OverrideCursor = Cursors.No;
-            }
-            else if (Mouse.OverrideCursor == Cursors.No)
-            {
-                Mouse.OverrideCursor = null;
+                e.Cursor = Cursors.No;
+                e.Handled = true;
             }
         }
 

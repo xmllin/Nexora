@@ -53,9 +53,16 @@ namespace Nexora.Services.Downloads
                 return await GetFirefoxReleasesAsync(app, token);
             if (id == "tor-browser")
                 return await GetTorBrowserReleasesAsync(app, token);
-            if (id != "vlc" && id != "aida64" && id != "malwarebytes" && id != "winrar" &&
-                id != "nvidia-app" && id != "tor-browser" && id != "firefox" && id != "vscode" &&
-                id != "visualstudio" && id != "glaryutilities5" && id != "hwmonitor" && id != "everything")
+            if (id == "winrar")
+                return await GetWinRarReleasesAsync(app, token);
+            if (id == "vlc")
+                return await GetVlcReleasesAsync(app, token);
+            if (id == "aida64")
+                return await GetAida64ReleasesAsync(app, token);
+            if (id == "vscode")
+                return await GetVSCodeReleasesAsync(app, token);
+            if (id != "malwarebytes" && id != "nvidia-app" && id != "visualstudio" &&
+                id != "glaryutilities5" && id != "hwmonitor" && id != "everything")
                 return null;
 
             if (id == "everything")
@@ -221,6 +228,14 @@ private sealed class LinkInfo
 
         private async Task<DownloadInfo> ResolveVlcAsync(AppDefinition app, CancellationToken token)
         {
+            var releases = await GetVlcReleasesAsync(app, token);
+            var latest = releases.FirstOrDefault();
+            if (latest?.Download != null)
+            {
+                try { return await RequireBinaryProbeAsync(latest.Download, token); }
+                catch (Exception) when (!token.IsCancellationRequested) { }
+            }
+
             var platform = PlatformDetectionService.Current;
             var downloadPage = "https://images.videolan.org/vlc/download-windows.html";
             var html = await GetHtmlAsync(downloadPage, token);
@@ -284,6 +299,14 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
     var platform = PlatformDetectionService.Current;
     if (platform.Architecture == "x86")
         throw new InvalidOperationException("AIDA64 v8.xx поддерживает только 64-разрядную Windows 10 и новее.");
+
+    var releases = await GetAida64ReleasesAsync(app, token);
+    var latest = releases.FirstOrDefault();
+    if (latest?.Download != null)
+    {
+        try { return await RequireBinaryProbeAsync(latest.Download, token); }
+        catch (Exception) when (!token.IsCancellationRequested) { }
+    }
 
     var pageUrl = "https://www.aida64.com/downloads";
     var html = await GetHtmlAsync(pageUrl, token);
@@ -470,6 +493,18 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
 
         private async Task<DownloadInfo> ResolveVSCodeAsync(AppDefinition app, CancellationToken token)
         {
+            var releases = await GetVSCodeReleasesAsync(app, token);
+            var latest = releases.FirstOrDefault();
+            if (latest?.Download != null)
+            {
+                try
+                {
+                    var versionInfo = latest.Download;
+                    return await RequireBinaryProbeAsync(versionInfo, token);
+                }
+                catch (Exception) when (!token.IsCancellationRequested) { }
+            }
+
             var architecture = PlatformDetectionService.Current.Architecture;
             var target = architecture == "arm64" ? "win32-arm64-user" : architecture == "x86" ? "win32-user" : "win32-x64-user";
             var url = "https://update.code.visualstudio.com/latest/" + target + "/stable";
@@ -503,8 +538,182 @@ private async Task<DownloadInfo> ResolveMakuTweakerAsync(AppDefinition app, Canc
             return info;
         }
 
+        private async Task<IReadOnlyList<AppRelease>> GetWinRarReleasesAsync(AppDefinition app, CancellationToken token)
+        {
+            var pageUrl = "https://www.win-rar.com/whatsnew.html";
+            var html = await GetHtmlAsync(pageUrl, token);
+            var releases = new List<AppRelease>();
+
+            foreach (Match match in Regex.Matches(
+                html,
+                @"Version\s+(?<version>\d+\.\d+)(?!\s*(?:beta|alpha|rc))",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                var version = match.Groups["version"].Value;
+                if (VersionInfo.Parse(version).CompareTo(VersionInfo.Parse("6.00")) < 0)
+                    continue;
+
+                var parts = version.Split('.');
+                if (parts.Length != 2 || !int.TryParse(parts[0], out var major) || !int.TryParse(parts[1], out var minor))
+                    continue;
+
+                var code = (major * 100 + minor).ToString("000");
+                var fileName = "winrar-x64-" + code + ".exe";
+                var url = "https://www.win-rar.com/fileadmin/winrar-versions/winrar/" + fileName;
+                var info = CreateInfo(url, fileName, "WinRAR");
+                info.Version = version;
+
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = "WinRAR " + version,
+                    Download = info
+                });
+            }
+
+            return releases
+                .GroupBy(item => item.Version, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderByDescending(item => VersionInfo.Parse(item.Version))
+                .ToList();
+        }
+
+        private async Task<IReadOnlyList<AppRelease>> GetVlcReleasesAsync(AppDefinition app, CancellationToken token)
+        {
+            var root = "https://download.videolan.org/pub/videolan/vlc/";
+            var html = await GetHtmlAsync(root, token);
+            var versions = Regex.Matches(
+                    html,
+                    @"(?<![0-9])(?<version>\d+\.\d+(?:\.\d+){0,2})(?=\/)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(match => match.Groups["version"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(version => VersionInfo.Parse(version))
+                .ToList();
+
+            var platform = PlatformDetectionService.Current.Architecture == "arm64"
+                ? "winarm64"
+                : PlatformDetectionService.Current.Architecture == "x86"
+                    ? "win32"
+                    : "win64";
+
+            var releases = new List<AppRelease>();
+            foreach (var version in versions)
+            {
+                var fileName = "vlc-" + version + "-" + platform + ".exe";
+                var url = root + version + "/" + platform + "/" + fileName;
+                var info = CreateInfo(url, fileName, "VideoLAN");
+                info.Version = version;
+
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = "VLC " + version,
+                    Download = info
+                });
+            }
+
+            return releases;
+        }
+
+        private async Task<IReadOnlyList<AppRelease>> GetAida64ReleasesAsync(AppDefinition app, CancellationToken token)
+        {
+            var pageUrl = "https://www.aida64.com/downloads/archive";
+            var html = await GetHtmlAsync(pageUrl, token);
+            var versions = Regex.Matches(
+                    html,
+                    @"(?<![0-9])(?<version>\d+\.\d+\.\d{3,5})(?![0-9])",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(match => match.Groups["version"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(version => VersionInfo.Parse(version).CompareTo(VersionInfo.Parse("5.50.5500")) >= 0)
+                .OrderByDescending(version => VersionInfo.Parse(version))
+                .ToList();
+
+            var releases = new List<AppRelease>();
+            foreach (var version in versions)
+            {
+                var parts = version.Split('.');
+                if (parts.Length < 2)
+                    continue;
+
+                var compact = parts[0] + parts[1];
+                var fileName = "aida64extreme" + compact + ".exe";
+                var url = "https://download2.aida64.com/" + fileName;
+                var info = CreateInfo(url, fileName, "AIDA64");
+                info.Version = version;
+
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = "AIDA64 " + version,
+                    Download = info
+                });
+            }
+
+            return releases
+                .GroupBy(item => item.Version, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderByDescending(item => VersionInfo.Parse(item.Version))
+                .ToList();
+        }
+
+        private async Task<IReadOnlyList<AppRelease>> GetVSCodeReleasesAsync(AppDefinition app, CancellationToken token)
+        {
+            var pageUrl = "https://code.visualstudio.com/updates/archive";
+            var html = await GetHtmlAsync(pageUrl, token);
+            var versions = Regex.Matches(
+                    html,
+                    @"Visual\s+Studio\s+Code\s+(?<version>\d+\.\d+)(?!\s*\(Insiders\))",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                .Cast<Match>()
+                .Select(match => match.Groups["version"].Value)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(version => VersionInfo.Parse(version))
+                .ToList();
+
+            var architecture = PlatformDetectionService.Current.Architecture;
+            var target = architecture == "arm64"
+                ? "win32-arm64-user"
+                : architecture == "x86"
+                    ? "win32-user"
+                    : "win32-x64-user";
+
+            var releases = new List<AppRelease>();
+            foreach (var version in versions)
+            {
+                var fileName = architecture == "arm64"
+                    ? "VSCodeUserSetup-" + version + "-arm64.exe"
+                    : architecture == "x86"
+                        ? "VSCodeUserSetup-" + version + ".exe"
+                        : "VSCodeUserSetup-" + version + "-x64.exe";
+                var url = "https://update.code.visualstudio.com/" + version + "/" + target + "/stable";
+                var info = CreateInfo(url, fileName, "Microsoft");
+
+                info.Version = version;
+                releases.Add(new AppRelease
+                {
+                    Version = version,
+                    Title = "Visual Studio Code " + version,
+                    Download = info
+                });
+            }
+
+            return releases;
+        }
+
         private async Task<DownloadInfo> ResolveWinRarAsync(AppDefinition app, CancellationToken token)
         {
+            var releases = await GetWinRarReleasesAsync(app, token);
+            var latest = releases.FirstOrDefault();
+            if (latest?.Download != null)
+            {
+                try { return await RequireBinaryProbeAsync(latest.Download, token); }
+                catch (Exception) when (!token.IsCancellationRequested) { }
+            }
+
             var pageUrl = "https://www.win-rar.com/download.html";
             var html = await GetHtmlAsync(pageUrl, token);
             var candidates = ExtractCandidates(pageUrl, html)

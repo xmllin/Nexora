@@ -64,7 +64,6 @@ namespace Nexora.Services.Downloads
             var info = await ResolveSpecialAsync(app, token);
             if (info == null) return new List<AppRelease>();
             var version = VersionNormalizer.ExtractMostSpecific(info.Version, info.FileName, info.Url);
-            if (string.IsNullOrWhiteSpace(version)) version = "Последняя";
             return new[]
             {
                 new AppRelease

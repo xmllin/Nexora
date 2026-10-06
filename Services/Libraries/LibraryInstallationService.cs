@@ -28,7 +28,60 @@ namespace Nexora.Services.Libraries
                     return;
                 }
 
+                // 1602/1223 are normal user-cancel results. Do not surface them
+                // as an installation error notification.
+                if (process.ExitCode == 1602 || process.ExitCode == 1223)
+                    throw new OperationCanceledException();
+
                 if (process.ExitCode != 0 && process.ExitCode != 3010)
+                    throw new InvalidOperationException("Установщик завершился с кодом " + process.ExitCode + ".");
+            }
+        }
+
+        public string GetCachedInstallerPath(LibraryDefinition definition)
+        {
+            if (definition == null) return string.Empty;
+
+            var folder = Path.Combine(Path.GetTempPath(), "Nexora", "Libraries");
+            var candidates = new[]
+            {
+                definition.FileName,
+                definition.Id + ".exe",
+                definition.Id + ".msi"
+            };
+
+            foreach (var candidate in candidates.Where(x => !string.IsNullOrWhiteSpace(x)))
+            {
+                var path = Path.Combine(folder, candidate);
+                if (File.Exists(path)) return path;
+            }
+
+            return string.Empty;
+        }
+
+        public async Task LaunchInstallerAsync(LibraryDefinition definition, string installerPath, CancellationToken token)
+        {
+            if (definition == null || string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+                throw new InvalidOperationException("Файл установщика не найден.");
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = installerPath,
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = Path.GetDirectoryName(installerPath)
+                    ?? Environment.GetFolderPath(Environment.SpecialFolder.System)
+            };
+
+            using (var process = Process.Start(startInfo))
+            {
+                if (process == null) throw new InvalidOperationException("Не удалось открыть установщик.");
+                await process.WaitForExitAsync(token);
+
+                if (process.ExitCode == 1602 || process.ExitCode == 1223)
+                    throw new OperationCanceledException();
+
+                if (process.ExitCode != 0 && process.ExitCode != 3010 && process.ExitCode != 1638)
                     throw new InvalidOperationException("Установщик завершился с кодом " + process.ExitCode + ".");
             }
         }
@@ -117,7 +170,15 @@ namespace Nexora.Services.Libraries
 
             var uninstallCommand = FindUninstallCommand(definition);
             if (string.IsNullOrWhiteSpace(uninstallCommand))
+            {
+                // Some Visual C++ entries keep an UninstallString that points to
+                // a removed Package Cache executable. In that case the original
+                // installer is not required: download the official package again
+                // and use its documented /uninstall mode.
+                if (string.Equals(definition.Category, "Visual C++ Redistributable", StringComparison.OrdinalIgnoreCase))
+                    throw new FileNotFoundException("Не найден рабочий установщик для удаления компонента.");
                 throw new InvalidOperationException("Для этого компонента не найдено корректного удаления из системы.");
+            }
 
             using (var process = Process.Start(CreateUninstallStartInfo(uninstallCommand)))
             {

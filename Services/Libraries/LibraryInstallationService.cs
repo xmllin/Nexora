@@ -86,12 +86,20 @@ namespace Nexora.Services.Libraries
 
         public async Task InstallWindowsFeatureAsync(LibraryDefinition definition, CancellationToken token)
         {
-            await RunPowerShellAsync("Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -NoRestart -ErrorAction Stop", token);
+            var exitCode = await RunHiddenPowerShellAsync(
+                "$ErrorActionPreference='Stop'; Enable-WindowsOptionalFeature -Online -FeatureName NetFx3 -All -NoRestart -ErrorAction Stop",
+                token);
+            if (exitCode != 0)
+                throw new InvalidOperationException("Операция Windows завершилась с кодом " + exitCode + ".");
         }
 
         public async Task UninstallWindowsFeatureAsync(LibraryDefinition definition, CancellationToken token)
         {
-            await RunPowerShellAsync("Disable-WindowsOptionalFeature -Online -FeatureName NetFx3 -NoRestart -ErrorAction Stop", token);
+            var exitCode = await RunHiddenPowerShellAsync(
+                "$ErrorActionPreference='Stop'; Disable-WindowsOptionalFeature -Online -FeatureName NetFx3 -NoRestart -ErrorAction Stop",
+                token);
+            if (exitCode != 0)
+                throw new InvalidOperationException("Операция Windows завершилась с кодом " + exitCode + ".");
         }
 
         public async Task<string> SetPowerShellScriptsEnabledAsync(bool enabled, CancellationToken token)

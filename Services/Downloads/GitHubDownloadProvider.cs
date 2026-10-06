@@ -125,7 +125,7 @@ namespace Nexora.Services.Downloads
 
                                 result.Add(new AppRelease
                                 {
-                                    Version = string.IsNullOrWhiteSpace(version) ? "Последняя" : version,
+                                    Version = string.IsNullOrWhiteSpace(version) ? string.Empty : version,
                                     Title = string.IsNullOrWhiteSpace(title) ? tag : title,
                                     PublishedAt = published,
                                     IsPrerelease = prerelease,

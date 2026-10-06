@@ -96,10 +96,24 @@
             </Setter>
         </Style>
         <DataTemplate x:Key="LibraryFilterItemTemplate">
-            <StackPanel Orientation="Horizontal">
-                <Image Source="{local:SvgImage Source=interface/white/list-tree.svg}" Width="16" Height="16" Margin="0,0,8,0"/>
-                <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
-            </StackPanel>
+            <Grid HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="16"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Image Grid.Column="0"
+                       Source="{local:SvgImage Source=interface/white/list-tree.svg}"
+                       Width="16"
+                       Height="16"
+                       Margin="0,0,8,0"
+                       VerticalAlignment="Top"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding}"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           TextTrimming="None"
+                           MaxWidth="470"/>
+            </Grid>
         </DataTemplate>
         <Style x:Key="LibraryFilterComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Width" Value="220"/>
@@ -128,9 +142,21 @@
                                 </Grid>
                             </Border>
                             <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}" PopupAnimation="Fade" StaysOpen="False">
-                                <Border Width="300" MinWidth="300" HorizontalAlignment="Left" MaxHeight="300" Background="#0F2035" BorderBrush="#367FCE" BorderThickness="1" CornerRadius="8" Padding="2">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
-                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                <Border HorizontalAlignment="Left"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxWidth="520"
+                                        MaxHeight="320"
+                                        Background="#0F2035"
+                                        BorderBrush="#367FCE"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="2"
+                                        SnapsToDevicePixels="True">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  CanContentScroll="False">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"
+                                                        HorizontalAlignment="Stretch"/>
                                     </ScrollViewer>
                                 </Border>
                             </Popup>

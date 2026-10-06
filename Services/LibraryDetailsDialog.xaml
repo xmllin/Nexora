@@ -60,6 +60,7 @@
                     BorderBrush="#2A4A69"
                     BorderThickness="0,0,0,1"
                     Padding="10,0"
+                    CornerRadius="13,13,0,0"
                     Cursor="Arrow"
                     ClipToBounds="True"
                     MouseLeftButtonDown="Header_MouseLeftButtonDown">

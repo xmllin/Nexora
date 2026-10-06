@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using Nexora.Services.Downloads;
 using System.Windows.Media;
 
 namespace Nexora.Models
@@ -51,6 +53,11 @@ namespace Nexora.Models
         public bool IsBusy { get; set; }
         public bool IsDeleting { get; set; }
         public bool IsRecommended { get; set; }
+        public CancellationTokenSource DownloadCancellation { get; set; }
+        public PauseController DownloadPauseController { get; set; }
+        public bool IsPaused => DownloadPauseController != null && DownloadPauseController.IsPaused;
+        public bool CanPauseDownload => IsBusy && ShowProgress && DownloadCancellation != null && !IsPaused;
+        public bool CanResumeDownload => IsBusy && ShowProgress && DownloadCancellation != null && IsPaused;
         public bool IsWindowsFeature => string.Equals(Definition?.InstallationType, "windowsFeature", System.StringComparison.OrdinalIgnoreCase);
         public bool HasDownloadAction => !string.IsNullOrWhiteSpace(Definition?.DownloadUrl) || IsWindowsFeature;
         public string DownloadActionText => IsWindowsFeature ? "Включить" : "Скачать";
@@ -69,7 +76,7 @@ namespace Nexora.Models
                 {
                     case LibraryInstallStatus.Installed: return "Установлено";
                     case LibraryInstallStatus.UpdateAvailable: return "Доступно обновление";
-                    case LibraryInstallStatus.Manual: return "Ручная установка";
+                    case LibraryInstallStatus.Manual: return "Не установлено";
                     default: return "Не установлено";
                 }
             }

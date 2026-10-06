@@ -44,7 +44,7 @@ namespace Nexora
 
             EventManager.RegisterClassHandler(
                 typeof(Button),
-                Button.IsEnabledChangedEvent,
+                UIElement.IsEnabledChangedEvent,
                 new DependencyPropertyChangedEventHandler(HandleButtonEnabledChanged),
                 true);
 

@@ -40,7 +40,7 @@
     <Border Background="#0B192A" BorderBrush="#2A4A69" BorderThickness="1" CornerRadius="14" Padding="16">
         <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown" Cursor="Hand" Background="Transparent">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock x:Name="TitleText" FontSize="20" FontWeight="SemiBold" Foreground="#F1F6FF" TextWrapping="Wrap"/>

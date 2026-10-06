@@ -58,6 +58,7 @@
             <Setter Property="BorderBrush" Value="#31516E"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="4"/>
+            <Setter Property="MinWidth" Value="218"/>
             <Setter Property="TextElement.Foreground" Value="#F1F6FF"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -72,7 +73,7 @@
         <Style x:Key="LibraryMenuItem" TargetType="MenuItem">
             <Setter Property="Padding" Value="12,8"/>
             <Setter Property="Margin" Value="2"/>
-            <Setter Property="MinWidth" Value="242"/>
+            <Setter Property="MinWidth" Value="210"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -126,7 +127,7 @@
                                 </Grid>
                             </Border>
                             <Popup x:Name="PART_Popup" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}" PopupAnimation="Fade" StaysOpen="False">
-                                <Border MinWidth="260" Width="Auto" HorizontalAlignment="Left" MaxHeight="260" Background="#0F2035" BorderBrush="#367FCE" BorderThickness="1" CornerRadius="8" Padding="2">
+                                <Border Width="300" MinWidth="300" HorizontalAlignment="Left" MaxHeight="300" Background="#0F2035" BorderBrush="#367FCE" BorderThickness="1" CornerRadius="8" Padding="2">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
                                         <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
@@ -395,8 +396,8 @@
                                 <TextBlock Text="{Binding ProgressText}" Opacity="{Binding ProgressOpacity}" Foreground="{StaticResource MutedBrush}" FontSize="10" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
                                 <ProgressBar Height="8" Margin="0,8,8,0" Opacity="{Binding ProgressOpacity}" Maximum="100" Value="{Binding Progress}" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}"/>
                             </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}">
-                                <Button Tag="{Binding}" Click="PauseResumeLibraryDownload_Click" Width="28" Height="26" Margin="0,6,4,0" Padding="0"
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="2" Visibility="{Binding ShowProgress, Converter={StaticResource BoolVisibility}}">
+                                <Button Tag="{Binding}" Click="PauseResumeLibraryDownload_Click" Width="28" Height="26" Margin="2" Padding="0"
                                         IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}">
                                     <Image Width="15" Height="15">
                                         <Image.Style>
@@ -411,7 +412,7 @@
                                         </Image.Style>
                                     </Image>
                                 </Button>
-                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Width="28" Height="26" Margin="0,6,0,0" Padding="0"
+                                <Button Tag="{Binding}" Click="CancelLibraryDownload_Click" Width="28" Height="26" Margin="2" Padding="0"
                                         IsEnabled="{Binding IsBusy}" Style="{StaticResource GhostButton}" ToolTip="Отменить">
                                     <Image Source="{local:SvgImage Source=interface/white/fluent-dismiss.svg}" Width="15" Height="15"/>
                                 </Button>

@@ -165,9 +165,24 @@ namespace Nexora.Pages
         {
             var item = (sender as MenuItem)?.Tag as LibraryItem;
             if (item == null) return;
-            var folder = item.HasDownloadedFile
-                ? Path.GetDirectoryName(item.DownloadedFilePath)
-                : Path.Combine(Path.GetTempPath(), "Nexora", "Libraries");
+
+            var file = item.DownloadedFilePath;
+            if (!string.IsNullOrWhiteSpace(file) && File.Exists(file))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = "/select,\"" + file.Replace("\"", "\\\"") + "\"",
+                        UseShellExecute = true
+                    });
+                    return;
+                }
+                catch { }
+            }
+
+            var folder = Path.Combine(Path.GetTempPath(), "Nexora", "Libraries");
             Directory.CreateDirectory(folder);
             OpenFolder(folder);
         }
@@ -179,6 +194,34 @@ namespace Nexora.Pages
             button.ContextMenu.PlacementTarget = button;
             button.ContextMenu.IsOpen = true;
             e.Handled = true;
+        }
+
+        private static void DeleteDownloadedFileNow(LibraryItem item)
+        {
+            if (item == null)
+                return;
+
+            var paths = new[]
+            {
+                item.DownloadedFilePath,
+                string.IsNullOrWhiteSpace(item.Definition?.FileName)
+                    ? null
+                    : Path.Combine(Path.GetTempPath(), "Nexora", "Libraries", item.Definition.FileName)
+            };
+
+            foreach (var path in paths.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    if (File.Exists(path))
+                        File.Delete(path);
+                }
+                catch { }
+            }
+
+            item.DownloadedFilePath = null;
+            item.Notify(nameof(item.DownloadedFilePath));
+            item.Notify(nameof(item.HasDownloadedFile));
         }
 
         private void Details_Click(object sender, RoutedEventArgs e)
@@ -612,23 +655,17 @@ namespace Nexora.Pages
             }
         }
 
-        private void PauseLibraryDownload_Click(object sender, RoutedEventArgs e)
+        private void PauseResumeLibraryDownload_Click(object sender, RoutedEventArgs e)
         {
             var item = (sender as Button)?.Tag as LibraryItem;
             if (item?.DownloadPauseController == null || !item.IsBusy)
                 return;
 
-            item.DownloadPauseController.Pause();
-            item.Refresh();
-        }
+            if (item.DownloadPauseController.IsPaused)
+                item.DownloadPauseController.Resume();
+            else
+                item.DownloadPauseController.Pause();
 
-        private void ResumeLibraryDownload_Click(object sender, RoutedEventArgs e)
-        {
-            var item = (sender as Button)?.Tag as LibraryItem;
-            if (item?.DownloadPauseController == null || !item.IsBusy)
-                return;
-
-            item.DownloadPauseController.Resume();
             item.Refresh();
         }
 
@@ -641,6 +678,7 @@ namespace Nexora.Pages
             item.DownloadCancellation.Cancel();
             if (item.DownloadPauseController != null)
                 item.DownloadPauseController.Resume();
+            DeleteDownloadedFileNow(item);
         }
 
         private async Task InstallWindowsFeatureAsync(LibraryItem item)

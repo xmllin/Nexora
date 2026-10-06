@@ -60,10 +60,10 @@ namespace Nexora.Services
                 Style = (Style)FindResource("Label"),
                 VerticalAlignment = VerticalAlignment.Top
             };
-            var valueText = new TextBlock
+            var valueText = new TextBox
             {
                 Text = string.IsNullOrWhiteSpace(value) ? "—" : value,
-                Style = (Style)FindResource("Value"),
+                Style = (Style)FindResource("ValueBox"),
                 VerticalAlignment = VerticalAlignment.Top
             };
 
@@ -94,17 +94,24 @@ namespace Nexora.Services
 
         private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ChangedButton != MouseButton.Left)
+            if (e.ChangedButton != MouseButton.Left || e.ButtonState != MouseButtonState.Pressed)
                 return;
 
             try
             {
+                DragHeader.Cursor = Cursors.Hand;
                 DragMove();
             }
             catch (InvalidOperationException)
             {
                 // The window may already be closing.
             }
+            finally
+            {
+                DragHeader.Cursor = Cursors.Arrow;
+            }
+
+            e.Handled = true;
         }
 
         private void Close_Click(object sender, RoutedEventArgs e) => Close();

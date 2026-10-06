@@ -30,6 +30,24 @@ namespace Nexora
                 new KeyboardFocusChangedEventHandler(SuppressKeyboardFocusVisual),
                 true);
 
+            EventManager.RegisterClassHandler(
+                typeof(Button),
+                Mouse.MouseEnterEvent,
+                new MouseEventHandler(HandleButtonMouseEnter),
+                true);
+
+            EventManager.RegisterClassHandler(
+                typeof(Button),
+                Mouse.MouseLeaveEvent,
+                new MouseEventHandler(HandleButtonMouseLeave),
+                true);
+
+            EventManager.RegisterClassHandler(
+                typeof(Button),
+                Button.IsEnabledChangedEvent,
+                new DependencyPropertyChangedEventHandler(HandleButtonEnabledChanged),
+                true);
+
             if (e.Args.Any(arg => string.Equals(arg, "--diagnose-catalog", StringComparison.OrdinalIgnoreCase)))
             {
                 await RunCatalogDiagnosticsAsync();
@@ -40,6 +58,36 @@ namespace Nexora
             var mainWindow = new MainWindow();
             MainWindow = mainWindow;
             mainWindow.Show();
+        }
+
+        private static void HandleButtonMouseEnter(object sender, MouseEventArgs e)
+        {
+            if (sender is Button button && !button.IsEnabled)
+                Mouse.OverrideCursor = Cursors.No;
+        }
+
+        private static void HandleButtonMouseLeave(object sender, MouseEventArgs e)
+        {
+            if (Mouse.OverrideCursor == Cursors.No)
+                Mouse.OverrideCursor = null;
+        }
+
+        private static void HandleButtonEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (!(sender is Button button))
+                return;
+
+            if (!button.IsEnabled)
+            {
+                var position = Mouse.GetPosition(button);
+                if (position.X >= 0 && position.Y >= 0 &&
+                    position.X <= button.ActualWidth && position.Y <= button.ActualHeight)
+                    Mouse.OverrideCursor = Cursors.No;
+            }
+            else if (Mouse.OverrideCursor == Cursors.No)
+            {
+                Mouse.OverrideCursor = null;
+            }
         }
 
         private static void SuppressKeyboardFocusVisual(object sender, KeyboardFocusChangedEventArgs e)

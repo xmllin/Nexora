@@ -19,7 +19,11 @@ namespace Nexora.Services.Libraries
 
             try
             {
-                if (string.Equals(definition.Id, "vcpp-2015-2026-x64", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(definition.Id, "dotnet-framework-481", StringComparison.OrdinalIgnoreCase))
+                {
+                    installed = TryDetectDotNetFramework481(out installedVersion);
+                }
+                else if (string.Equals(definition.Id, "vcpp-2015-2026-x64", StringComparison.OrdinalIgnoreCase))
                 {
                     installed = TryDetectVcppV14("x64", out installedVersion);
                 }
@@ -62,6 +66,36 @@ namespace Nexora.Services.Libraries
                 ? LibraryInstallStatus.Installed
                 : LibraryInstallStatus.Missing;
             return new LibraryItem(definition, status, installedVersion);
+        }
+
+        private static bool TryDetectDotNetFramework481(out string installedVersion)
+        {
+            installedVersion = null;
+            const int minimumRelease = 533320;
+            const string keyPath = @"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full";
+
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+            {
+                using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
+                using (var key = baseKey.OpenSubKey(keyPath))
+                {
+                    if (key == null)
+                        continue;
+
+                    var releaseValue = key.GetValue("Release");
+                    if (releaseValue == null)
+                        continue;
+
+                    var release = Convert.ToInt32(releaseValue);
+                    if (release < minimumRelease)
+                        continue;
+
+                    installedVersion = "4.8.1";
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool TryDetectVcppV14(string architecture, out string installedVersion)

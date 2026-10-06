@@ -382,15 +382,26 @@ namespace Nexora.Pages
             catch { }
         }
 
-        private void VersionComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void VersionComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!IsInitialized) return;
             if (!(VersionComboBox.SelectedItem is AppRelease release))
                 return;
 
             ReleaseVersionText.Text = GetReleaseDisplayVersion(release);
-
             ApplyDownloadDetails(release.Download);
+
+            if (release.Download != null && !release.Download.SizeBytes.HasValue)
+            {
+                try
+                {
+                    if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                        await LoadWinGetDownloadMetadataAsync(release.Download);
+                    else if (!string.IsNullOrWhiteSpace(release.Download.Url))
+                        await LoadDownloadSizeAsync(release.Download);
+                }
+                catch { }
+            }
         }
 
         private static string GetReleaseDisplayVersion(AppRelease release)

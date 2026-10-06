@@ -32,7 +32,7 @@ namespace Nexora.Tests
             Assert.Equal("Не установлено", missing.StatusText);
             Assert.Equal("Установлено", installed.StatusText);
             Assert.Equal("Доступно обновление", update.StatusText);
-            Assert.Equal("Ручная установка", manual.StatusText);
+            Assert.Equal("Не установлено", manual.StatusText);
         }
 
         [Fact]

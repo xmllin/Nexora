@@ -210,6 +210,7 @@ namespace Nexora.Pages
                 item.InstalledVersion = detected.InstalledVersion;
                 item.IsBusy = false;
                 item.Notify(nameof(item.Status));
+                item.Notify(nameof(item.ShowRecommended));
                 item.Notify(nameof(item.InstalledVersion));
                 item.Notify(nameof(item.IsBusy));
                 InstallStatusText.Text = "Восстановление завершено: " + item.Definition.Name;
@@ -448,7 +449,8 @@ namespace Nexora.Pages
                     var detected = _detection.Detect(item.Definition);
                     item.Status = detected.Status;
                     item.InstalledVersion = detected.InstalledVersion;
-                    item.IsSelected = false; item.IsBusy = false; item.Progress = item.Status == LibraryInstallStatus.Installed ? 100 : 0;
+                    item.IsSelected = false; item.IsBusy = false;
+                    item.Notify(nameof(item.ShowRecommended)); item.Progress = item.Status == LibraryInstallStatus.Installed ? 100 : 0;
                     item.ProgressText = item.Status == LibraryInstallStatus.Installed ? "Загружено и установлено" : "Установщик завершён";
                     if (item.Status == LibraryInstallStatus.Installed)
                     {
@@ -550,6 +552,7 @@ namespace Nexora.Pages
                     item.InstalledVersion = detected.InstalledVersion;
                     item.IsSelected = false;
                     item.IsBusy = false;
+                    item.Notify(nameof(item.ShowRecommended));
                     item.Progress = item.Status == LibraryInstallStatus.Installed ? 100 : 0;
                     if (item.Status == LibraryInstallStatus.Installed)
                     {

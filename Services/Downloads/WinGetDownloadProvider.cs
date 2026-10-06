@@ -22,6 +22,9 @@ namespace Nexora.Services.Downloads
     {
         private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(5);
         private static readonly Regex PackageIdRegex = new Regex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static string CachedWingetPath;
+        private static readonly object WingetPathLock = new object();
+
         private static readonly Regex VersionLineRegex = new Regex(
             @"^v?([0-9]+(?:\.[0-9]+){0,15}(?:[-+][0-9A-Za-z.-]+)?)$",
             RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -181,6 +184,7 @@ namespace Nexora.Services.Downloads
                 "--id", app.Download.PackageId,
                 "--exact",
                 "--versions",
+                "--locale", "en-US",
                 "--accept-source-agreements",
                 "--disable-interactivity"
             };
@@ -306,6 +310,26 @@ namespace Nexora.Services.Downloads
                         BytesPerSecond = 0
                     });
                 }).ConfigureAwait(false);
+
+                if (result.ExitCode != 0)
+                {
+                    await TryRefreshWingetSourceAsync(winget, token).ConfigureAwait(false);
+                    result = await RunProcessAsync(winget, args, token, CommandTimeout, line =>
+                    {
+                        var match = Regex.Match(line ?? string.Empty, @"(?<![0-9])([0-9]{1,3})%(?![0-9])");
+                        if (!match.Success) return;
+
+                        if (!int.TryParse(match.Groups[1].Value, out var percent)) return;
+
+                        progress?.Report(new DownloadProgress
+                        {
+                            BytesReceived = 0,
+                            TotalBytes = null,
+                            Progress = Math.Max(0, Math.Min(100, percent)),
+                            BytesPerSecond = 0
+                        });
+                    }).ConfigureAwait(false);
+                }
 
                 if (result.ExitCode != 0)
                     throw new InvalidOperationException(
@@ -478,7 +502,7 @@ namespace Nexora.Services.Downloads
 
         private static string FindInstallerFile(string directory, DownloadInfo info)
         {
-            var files = Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+            var files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
                 .Where(IsInstallerFile)
                 .Select(path => new FileInfo(path))
                 .Where(file => file.Exists && file.Length > 0)
@@ -533,6 +557,12 @@ namespace Nexora.Services.Downloads
 
         private static async Task<string> ResolveWingetAsync(CancellationToken token)
         {
+            lock (WingetPathLock)
+            {
+                if (!string.IsNullOrWhiteSpace(CachedWingetPath))
+                    return CachedWingetPath;
+            }
+
             var candidates = new List<string> { "winget" };
 
             var localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA");
@@ -570,7 +600,11 @@ namespace Nexora.Services.Downloads
                         TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
                     if (result.ExitCode == 0)
+                    {
+                        lock (WingetPathLock)
+                            CachedWingetPath = candidate;
                         return candidate;
+                    }
                 }
                 catch
                 {
@@ -580,6 +614,22 @@ namespace Nexora.Services.Downloads
 
             throw new InvalidOperationException(
                 "WinGet не найден. Установите или восстановите App Installer (winget) в Windows.");
+        }
+
+        private static async Task TryRefreshWingetSourceAsync(string winget, CancellationToken token)
+        {
+            try
+            {
+                await RunProcessAsync(
+                    winget,
+                    new[] { "source", "update", "--name", "winget", "--disable-interactivity" },
+                    token,
+                    TimeSpan.FromMinutes(2)).ConfigureAwait(false);
+            }
+            catch
+            {
+                // The subsequent retry will return the original WinGet error.
+            }
         }
 
         private static void ValidateDefinition(AppDefinition app)

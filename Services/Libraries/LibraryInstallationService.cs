@@ -21,7 +21,7 @@ namespace Nexora.Services.Libraries
             {
                 if (process == null) throw new InvalidOperationException("Не удалось запустить установщик.");
                 await process.WaitForExitAsync(token);
-                if (process.ExitCode != 0 && process.ExitCode != 3010)
+                if (process.ExitCode != 0 && process.ExitCode != 3010 && process.ExitCode != 1638)
                     throw new InvalidOperationException("Установщик завершился с кодом " + process.ExitCode + ".");
             }
         }

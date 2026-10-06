@@ -21,7 +21,14 @@ namespace Nexora.Services.Libraries
             {
                 if (process == null) throw new InvalidOperationException("Не удалось запустить установщик.");
                 await process.WaitForExitAsync(token);
-                if (process.ExitCode != 0 && process.ExitCode != 3010 && process.ExitCode != 1638)
+                if (process.ExitCode == 1638)
+                {
+                    // MSI: another version is already installed. The caller will
+                    // run component detection and keep the installed version.
+                    return;
+                }
+
+                if (process.ExitCode != 0 && process.ExitCode != 3010)
                     throw new InvalidOperationException("Установщик завершился с кодом " + process.ExitCode + ".");
             }
         }

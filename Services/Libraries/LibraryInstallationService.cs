@@ -209,7 +209,16 @@ namespace Nexora.Services.Libraries
                 throw new InvalidOperationException("Для этого компонента не найдено корректного удаления из системы.");
             }
 
-            using (var process = Process.Start(CreateUninstallStartInfo(uninstallCommand)))
+            var startInfo = CreateUninstallStartInfo(uninstallCommand);
+            var executableName = Path.GetFileName(startInfo.FileName);
+            if (!string.Equals(executableName, "msiexec.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                var executablePath = Environment.ExpandEnvironmentVariables(startInfo.FileName.Trim().Trim('"'));
+                if (!File.Exists(executablePath))
+                    throw new FileNotFoundException("Файл установщика для удаления не найден.", executablePath);
+            }
+
+            using (var process = Process.Start(startInfo))
             {
                 if (process == null) throw new InvalidOperationException("Не удалось запустить удаление компонента.");
                 _ = AutomateMaintenanceWindowAsync(process, MaintenanceAction.Uninstall, token);

@@ -111,7 +111,7 @@ namespace Nexora.Services
                 return;
 
             var point = e.GetPosition(box);
-            var index = box.GetCharacterIndexFromPoint(point, true);
+            var index = box.GetCharacterIndexFromPoint(point, false);
             box.Cursor = index >= 0 ? Cursors.IBeam : Cursors.Arrow;
         }
 

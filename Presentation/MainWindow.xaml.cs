@@ -73,7 +73,20 @@ namespace Nexora
         {
             var key = GetReleaseCacheKey(app);
             if (_releaseCache.TryGetValue(key, out releases) && releases != null && releases.Count > 0)
-                return true;
+            {
+                var sanitized = SanitizeReleaseHistory(app, releases.ToList());
+                if (sanitized.Count != releases.Count)
+                {
+                    _releaseCache[key] = sanitized;
+                    releases = sanitized;
+                    SaveDownloadCache();
+                }
+                else
+                {
+                    releases = sanitized;
+                }
+                return releases.Count > 0;
+            }
 
             releases = null;
             return false;
@@ -88,11 +101,21 @@ namespace Nexora
 
             if (!_releaseCache.TryGetValue(key, out var existing) || existing == null)
             {
-                _releaseCache[key] = incoming;
+                _releaseCache[key] = SanitizeReleaseHistory(app, incoming);
             }
             else
             {
-                var merged = existing.ToList();
+                var merged = SanitizeReleaseHistory(app, existing.ToList());
+
+                // When an application switches to WinGet as its authoritative
+                // source, discard stale Website/Direct entries from the old catalog.
+                if (string.Equals(app?.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                {
+                    merged = merged
+                        .Where(item => string.Equals(item?.Download?.Source, "WinGet", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+
                 foreach (var fresh in incoming)
                 {
                     var identity = GetReleaseIdentity(fresh);
@@ -106,11 +129,92 @@ namespace Nexora
                         merged[index] = MergeRelease(merged[index], fresh);
                     }
                 }
-                _releaseCache[key] = merged;
+
+                _releaseCache[key] = SanitizeReleaseHistory(app, merged);
             }
 
             _releaseCacheUpdated[key] = DateTime.UtcNow;
             SaveDownloadCache();
+        }
+
+        private static List<AppRelease> SanitizeReleaseHistory(AppDefinition app, IEnumerable<AppRelease> releases)
+        {
+            var result = (releases ?? Enumerable.Empty<AppRelease>())
+                .Where(item => item != null && item.Download != null)
+                .ToList();
+
+            var id = (app?.Id ?? string.Empty).Trim().ToLowerInvariant();
+
+            if (id == "firefox")
+            {
+                result = result
+                    .Where(item => !VersionInfo.Parse(item.Version).IsValid ||
+                                   VersionInfo.Parse(item.Version).CompareTo(VersionInfo.Parse("42.0")) >= 0)
+                    .ToList();
+            }
+            else if (id == "opera")
+            {
+                result = result
+                    .Where(item => !VersionInfo.Parse(item.Version).IsValid ||
+                                   VersionInfo.Parse(item.Version).CompareTo(VersionInfo.Parse("42.0.2393.85")) >= 0)
+                    .ToList();
+            }
+            else if (id == "opera-gx")
+            {
+                result = result
+                    .Where(item => !VersionInfo.Parse(item.Version).IsValid ||
+                                   VersionInfo.Parse(item.Version).CompareTo(VersionInfo.Parse("42.0.2393.85")) >= 0)
+                    .ToList();
+            }
+            else if (id == "telegram")
+            {
+                // Old parser could read the x64 architecture marker as the first
+                // version component (e.g. 64.7.2.5). Such entries are invalid.
+                result = result
+                    .Where(item => !RegexStartsWith64Version(item?.Version))
+                    .ToList();
+            }
+            else if (id == "chromium")
+            {
+                // Old cache entries exposed raw snapshot revisions as menu items.
+                // They should never be shown to users.
+                result = result
+                    .Where(item => !string.Equals(item?.DisplayVersion, "Revision " + item?.Version, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                foreach (var item in result)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.DisplayVersion))
+                    {
+                        var markerIndex = item.DisplayVersion.IndexOf(" - rev ", StringComparison.OrdinalIgnoreCase);
+                        if (markerIndex > 0)
+                            item.DisplayVersion = item.DisplayVersion.Substring(0, markerIndex);
+                    }
+                }
+            }
+            else if (id == "aida64")
+            {
+                result = result
+                    .Where(item => !string.Equals(item.Version, "840", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            else if (id == "steam")
+            {
+                result = result
+                    .Where(item => !string.Equals(item.Version, "2.10.91.91", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            return result;
+        }
+
+        private static bool RegexStartsWith64Version(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var trimmed = value.TrimStart('v', 'V');
+            return trimmed.StartsWith("64.", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string GetReleaseIdentity(AppRelease release)

@@ -31,9 +31,9 @@
     "icon": "logos/chrome.svg",
     "website": "https://www.google.com/chrome/",
     "download": {
-      "type": "Direct",
-      "url": "https://dl.google.com/chrome/install/ChromeStandaloneSetup64.exe",
-      "fileName": "ChromeStandaloneSetup64.exe"
+      "type": "WinGet",
+      "packageId": "Google.Chrome",
+      "packageSource": "winget"
     }
   },
   {
@@ -290,9 +290,9 @@
     "icon": "logos/lightshot.png",
     "website": "https://app.prntscr.com/",
     "download": {
-      "type": "Direct",
-      "url": "https://app.prntscr.com/build/setup-lightshot.exe",
-      "fileName": "setup-lightshot.exe"
+      "type": "WinGet",
+      "packageId": "Skillbrains.Lightshot",
+      "packageSource": "winget"
     }
   },
   {
@@ -305,8 +305,7 @@
     "download": {
       "type": "GitHub",
       "repository": "Happ-proxy/happ-desktop",
-      "assetPattern": "setup-Happ.{arch}.exe",
-      "includePrerelease": true
+      "assetPattern": "setup-Happ.{arch}.exe"
     }
   },
   {
@@ -480,9 +479,9 @@
     "icon": "logos/autoruns.png",
     "website": "https://learn.microsoft.com/sysinternals/downloads/autoruns",
     "download": {
-      "type": "Direct",
-      "url": "https://download.sysinternals.com/files/Autoruns.zip",
-      "fileName": "Autoruns.zip"
+      "type": "WinGet",
+      "packageId": "Microsoft.Sysinternals.Autoruns",
+      "packageSource": "winget"
     }
   },
   {
@@ -493,7 +492,9 @@
     "icon": "interface/white/fluent-app-folder.svg",
     "website": "https://www.cpuid.com/softwares/hwmonitor.html",
     "download": {
-      "type": "Website"
+      "type": "WinGet",
+      "packageId": "CPUID.HWMonitor",
+      "packageSource": "winget"
     }
   },
   {
@@ -528,9 +529,9 @@
     "icon": "logos/EarTrumpet.png",
     "website": "https://eartrumpet.app/",
     "download": {
-      "type": "Official",
-      "url": "https://install.eartrumpet.app/dev/EarTrumpet.Package.appinstaller",
-      "fileName": "EarTrumpet.Package.appinstaller"
+      "type": "WinGet",
+      "packageId": "File-New-Project.EarTrumpet",
+      "packageSource": "winget"
     }
   },
   {
@@ -617,7 +618,9 @@
     "icon": "logos/Visual_studio.png",
     "website": "https://visualstudio.microsoft.com/",
     "download": {
-      "type": "Website"
+      "type": "WinGet",
+      "packageId": "Microsoft.VisualStudio.Community",
+      "packageSource": "winget"
     }
   },
   {
@@ -651,9 +654,9 @@
     "icon": "logos/Driver_booster.png",
     "website": "https://www.iobit.com/en/driver-booster.php",
     "download": {
-      "type": "Direct",
-      "url": "https://www.iobit.com/downloadcenter.php?product=driver-booster-free-new&insur=en_db",
-      "fileName": "DriverBoosterSetup.exe"
+      "type": "WinGet",
+      "packageId": "IObit.DriverBooster",
+      "packageSource": "winget"
     },
     "recommendationTags": []
   },
@@ -665,7 +668,9 @@
     "icon": "interface/white/fluent-app-folder.svg",
     "website": "https://www.glarysoft.com/glary-utilities/",
     "download": {
-      "type": "Website"
+      "type": "WinGet",
+      "packageId": "Glarysoft.GlaryUtilities",
+      "packageSource": "winget"
     }
   },
   {

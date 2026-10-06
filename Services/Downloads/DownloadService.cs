@@ -89,6 +89,14 @@ namespace Nexora.Services.Downloads
 
                 try
                 {
+                    // Resolve the exact installer metadata before a WinGet download.
+                    // This gives the fallback HTTP path the same version-selected URL.
+                    if (string.Equals(app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase) &&
+                        provider is WinGetDownloadProvider winGetProvider)
+                    {
+                        await winGetProvider.EnrichDownloadInfoAsync(app, info, token).ConfigureAwait(false);
+                    }
+
                     var result = await provider.DownloadAsync(app, info, managedTarget, progress, token);
                     await FileValidator.ValidateAsync(result, app.Download, token);
                     AddHistory(app, result, info.Source ?? app.Download.Type);
@@ -101,6 +109,48 @@ namespace Nexora.Services.Downloads
                 }
                 catch (Exception ex)
                 {
+                    // WinGet remains the primary downloader. If its CDN request
+                    // fails after metadata was resolved, fall back to that exact
+                    // installer URL rather than failing a valid version selection.
+                    if (string.Equals(app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase) &&
+                        Uri.TryCreate(info.Url, UriKind.Absolute, out var fallbackUri) &&
+                        (fallbackUri.Scheme == Uri.UriSchemeHttp || fallbackUri.Scheme == Uri.UriSchemeHttps))
+                    {
+                        try
+                        {
+                            var fallbackPartial = managedTarget + ".part";
+                            var fallbackMeta = fallbackPartial + ".json";
+                            TryDeleteFile(fallbackPartial);
+                            TryDeleteFile(fallbackMeta);
+
+                            await HttpDownloads.DownloadResumableAsync(
+                                info.Url,
+                                fallbackPartial,
+                                fallbackMeta,
+                                0,
+                                info,
+                                app.Download,
+                                progress,
+                                token,
+                                null).ConfigureAwait(false);
+
+                            await FileValidator.ValidateAsync(fallbackPartial, app.Download, token);
+                            File.Move(fallbackPartial, managedTarget, true);
+                            TryDeleteFile(fallbackMeta);
+                            AddHistory(app, managedTarget, info.Source ?? app.Download.Type);
+                            return managedTarget;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            TryDeleteFile(managedTarget);
+                            throw;
+                        }
+                        catch (Exception fallbackEx)
+                        {
+                            DownloadLog.Error("WinGet и резервная HTTP-загрузка завершились ошибкой для " + app.Name + ".", fallbackEx);
+                        }
+                    }
+
                     DownloadLog.Error("Ошибка managed-загрузки файла для " + app.Name + ".", ex);
                     TryDeleteFile(managedTarget);
                     throw;

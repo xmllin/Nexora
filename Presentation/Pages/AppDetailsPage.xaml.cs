@@ -26,7 +26,6 @@ namespace Nexora.Pages
         private IReadOnlyList<AppRelease> _releases;
         private DownloadInfo _displayedInfo;
         private DownloadInfo _resolvedInitialDownload;
-        private string _latestVersion = string.Empty;
         private string _appNameFallback => string.IsNullOrWhiteSpace(_app?.Name) ? "Приложение" : _app.Name;
         private readonly SemaphoreSlim _metadataWarmSemaphore = new SemaphoreSlim(3, 3);
 
@@ -167,15 +166,11 @@ namespace Nexora.Pages
                 ReleaseVersionText.Text = GetReleaseDisplayVersion(selected);
                 ApplyDownloadDetails(selected.Download);
 
-                _latestVersion = string.IsNullOrWhiteSpace(_releases[0].Version)
-                    ? string.Empty
-                    : _releases[0].Version;
             }
             else
             {
                 ReleaseVersionText.Text = "Не определена";
                 ApplyDownloadDetails(null);
-                _latestVersion = string.Empty;
             }
 
             DownloadStatusText.Text = _releases.Count == 0

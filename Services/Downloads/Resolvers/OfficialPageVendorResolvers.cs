@@ -330,9 +330,11 @@ private async Task<DownloadInfo> ResolveAida64Async(AppDefinition app, Cancellat
         try
         {
             var info = await RequireBinaryProbeAsync(CreateInfo(candidate.Url, candidate.FileName, "AIDA64"), token);
-            var labeledVersion = FindFirstVersion(html, @"Version:\s*(?<version>\d+(?:\.\d+){2,9})");
+            var labeledVersion = FindFirstVersion(html, @"AIDA64\s+Extreme\s+Trial\s+version[\s\S]{0,500}?(?<version>\d+\.\d+\.\d+)");
+            if (string.IsNullOrWhiteSpace(labeledVersion))
+                labeledVersion = FindFirstVersion(html, @"Version[\s\S]{0,120}?(?<version>\d+\.\d+\.\d+)");
             info.Version = string.IsNullOrWhiteSpace(labeledVersion)
-                ? VersionNormalizer.ExtractMostSpecific(info.FileName, info.Url)
+                ? VersionNormalizer.ExtractMostSpecific(info.FileName)
                 : labeledVersion;
             return info;
         }

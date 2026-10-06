@@ -339,6 +339,15 @@ namespace Nexora.Pages
                 await provider.EnrichDownloadInfoAsync(_app, info, CancellationToken.None).ConfigureAwait(true);
                 _main.CacheDownloadInfo(info);
                 _main.CacheAppDownloadInfo(_app, info);
+                _main.CacheReleases(_app, new[]
+                {
+                    new AppRelease
+                    {
+                        Version = info.Version,
+                        Title = _app.Name,
+                        Download = info
+                    }
+                });
 
                 if (ReferenceEquals(_displayedInfo, info))
                 {
@@ -376,6 +385,15 @@ namespace Nexora.Pages
                 if (!size.HasValue) return;
                 info.SizeBytes = size.Value;
                 _main.CacheDownloadInfo(info);
+                _main.CacheReleases(_app, new[]
+                {
+                    new AppRelease
+                    {
+                        Version = info.Version,
+                        Title = _app.Name,
+                        Download = info
+                    }
+                });
                 if (ReferenceEquals(_displayedInfo, info))
                     ReleaseSizeText.Text = FormatSize(size.Value);
             }

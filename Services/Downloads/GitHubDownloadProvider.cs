@@ -112,7 +112,14 @@ namespace Nexora.Services.Downloads
 
                             foreach (var selected in selectedAssets)
                             {
-                                var version = VersionNormalizer.ExtractMostSpecific(tag, title, selected.Name);
+                                // Release tags are authoritative for GitHub projects.
+                                // Do not let asset names such as *-x64-7.2.9.exe turn
+                                // "64" into a part of the application version.
+                                var version = VersionNormalizer.ExtractMostSpecific(tag);
+                                if (string.IsNullOrWhiteSpace(version))
+                                    version = VersionNormalizer.ExtractMostSpecific(title);
+                                if (string.IsNullOrWhiteSpace(version))
+                                    version = VersionNormalizer.ExtractMostSpecific(selected.Name);
                                 if (string.IsNullOrWhiteSpace(version))
                                     version = VersionNormalizer.Normalize(tag ?? title ?? selected.Name);
 

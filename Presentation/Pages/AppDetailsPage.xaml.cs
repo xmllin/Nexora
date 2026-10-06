@@ -28,6 +28,7 @@ namespace Nexora.Pages
         private DownloadInfo _resolvedInitialDownload;
         private string _latestVersion = string.Empty;
         private string _appNameFallback => string.IsNullOrWhiteSpace(_app?.Name) ? "Приложение" : _app.Name;
+        private readonly SemaphoreSlim _metadataWarmSemaphore = new SemaphoreSlim(3, 3);
 
         public AppDetailsPage(MainWindow main, AppDefinition app)
         {
@@ -205,22 +206,30 @@ namespace Nexora.Pages
                 if (release?.Download == null || release.Download.SizeBytes.HasValue)
                     return;
 
-                if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
+                await _metadataWarmSemaphore.WaitAsync().ConfigureAwait(true);
+                try
                 {
-                    try
+                    if (string.Equals(_app.Download?.Type, "WinGet", StringComparison.OrdinalIgnoreCase))
                     {
-                        await LoadWinGetDownloadMetadataAsync(release.Download).ConfigureAwait(true);
+                        try
+                        {
+                            await LoadWinGetDownloadMetadataAsync(release.Download).ConfigureAwait(true);
+                        }
+                        catch { }
+                        return;
                     }
-                    catch { }
-                    return;
-                }
 
-                if (!string.IsNullOrWhiteSpace(release.Download.Url) &&
-                    Uri.TryCreate(release.Download.Url, UriKind.Absolute, out var uri) &&
-                    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                    if (!string.IsNullOrWhiteSpace(release.Download.Url) &&
+                        Uri.TryCreate(release.Download.Url, UriKind.Absolute, out var uri) &&
+                        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                    {
+                        try { await LoadDownloadSizeAsync(release.Download).ConfigureAwait(true); }
+                        catch { }
+                    }
+                }
+                finally
                 {
-                    try { await LoadDownloadSizeAsync(release.Download).ConfigureAwait(true); }
-                    catch { }
+                    _metadataWarmSemaphore.Release();
                 }
             });
 
@@ -395,10 +404,9 @@ namespace Nexora.Pages
             if (release == null)
                 return "Не определена";
 
-            // Chromium uses a numeric revision internally for sorting, while the
-            // UI must explicitly identify it as a revision. Other applications
-            // keep the pure version here, so a format suffix never leaks into
-            // the "Текущая версия" field.
+            // Chromium keeps the snapshot revision internally, while the UI
+            // shows only the mapped product version. Other applications keep
+            // their normal published version here.
             if (string.Equals(release.Download?.Source, "Chromium", StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(release.DisplayVersion))
             {

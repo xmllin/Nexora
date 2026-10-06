@@ -291,9 +291,22 @@ namespace Nexora.Pages
                 item.Notify(nameof(item.CanResumeDownload));
                 InstallStatusText.Text = "Восстановление: " + item.Definition.Name;
                 if (item.IsWindowsFeature)
+                {
                     await _installation.InstallWindowsFeatureAsync(item.Definition, CancellationToken.None);
+                }
                 else
+                {
+                    // "Переустановить" should work even when the installed
+                    // component's maintenance/uninstaller file has been removed.
+                    // In that case download a fresh installer and run it.
+                    if (!_installation.HasRepairCommand(item.Definition))
+                    {
+                        await DownloadLibraryAsync(item, installAfterDownload: true);
+                        return;
+                    }
+
                     await _installation.RepairAsync(item.Definition, CancellationToken.None);
+                }
 
                 var detected = _detection.Detect(item.Definition);
                 item.Status = detected.Status;
@@ -406,13 +419,22 @@ namespace Nexora.Pages
                     ? _detection.Detect(item.Definition)
                     : await DetectAfterUninstallAsync(item.Definition);
 
-                item.Status = detected.Status;
-                item.InstalledVersion = detected.InstalledVersion;
+                // A successful uninstall is authoritative for the UI. If Windows
+                // is still flushing the uninstall registry entry, RefreshDetectedStatuses
+                // will reconcile it on the next activation.
+                item.Status = item.IsWindowsFeature
+                    ? detected.Status
+                    : LibraryInstallStatus.Missing;
+                item.InstalledVersion = item.Status == LibraryInstallStatus.Installed
+                    ? detected.InstalledVersion
+                    : null;
                 item.IsSelected = false;
                 item.IsBusy = false;
                 item.IsDeleting = false;
                 item.Notify(nameof(item.Status));
                 item.Notify(nameof(item.InstalledVersion));
+                item.IsRecommended = IsRecommendedForSystem(item.Definition) && item.Status != LibraryInstallStatus.Installed;
+                item.Notify(nameof(item.ShowRecommended));
                 item.Notify(nameof(item.IsSelected));
                 item.Notify(nameof(item.IsDeleting));
                 item.Notify(nameof(item.IsBusy));

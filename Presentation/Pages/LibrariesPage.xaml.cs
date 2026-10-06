@@ -750,6 +750,8 @@ namespace Nexora.Pages
                 item.DownloadedFilePath = path;
                 item.Progress = 100;
                 item.ProgressText = "Загружено: " + FormatBytes(new FileInfo(path).Length);
+                // The file is ready, so pause/play/cancel controls are no longer needed.
+                item.ShowProgress = false;
                 item.Notify(nameof(item.Progress));
                 item.Notify(nameof(item.ProgressText));
                 item.Notify(nameof(item.DownloadedFilePath));
